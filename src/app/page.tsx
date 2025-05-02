@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import VoiceInput from '../components/VoiceInput';
 
 export default function Home() {
   return (
@@ -12,12 +13,18 @@ export default function Home() {
         <p className="text-xl text-center text-gray-300 mb-12">
           Your AI-powered financial assistant with the strength of Grock
         </p>
-        <div className="max-w-md mx-auto bg-gray-800 rounded-lg shadow-xl p-6">
-          <div className="text-center">
+        <div className="max-w-2xl mx-auto bg-gray-800 rounded-lg shadow-xl p-6">
+          <div className="text-center mb-8">
             <p className="text-lg mb-4">
-              Coming soon! Track your spending with natural language processing and get AI-powered insights.
+              Try these voice commands:
             </p>
+            <ul className="text-grock-200 space-y-2">
+              <li>"Add expense of 25 dollars for lunch in food category"</li>
+              <li>"Create a savings goal of 1000 dollars for vacation"</li>
+              <li>"Add income of 2000 dollars from salary"</li>
+            </ul>
           </div>
+          <VoiceInput />
         </div>
       </div>
     </main>
