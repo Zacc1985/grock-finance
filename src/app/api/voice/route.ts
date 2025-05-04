@@ -24,6 +24,7 @@ console.log('GROK_MODEL:', GROK_MODEL); // Debug: log the model name
 const functions = [
   {
     name: 'addTransaction',
+    type: 'function',
     description: 'Add a new transaction to track spending or income',
     parameters: {
       type: 'object',
@@ -56,6 +57,7 @@ const functions = [
   },
   {
     name: 'createGoal',
+    type: 'function',
     description: 'Create a new financial goal',
     parameters: {
       type: 'object',
@@ -78,6 +80,7 @@ const functions = [
   },
   {
     name: 'updateTransaction',
+    type: 'function',
     description: 'Update an existing transaction by its ID',
     parameters: {
       type: 'object',
@@ -94,6 +97,7 @@ const functions = [
   },
   {
     name: 'deleteTransaction',
+    type: 'function',
     description: 'Delete a transaction by its ID',
     parameters: {
       type: 'object',
@@ -105,6 +109,7 @@ const functions = [
   },
   {
     name: 'updateGoal',
+    type: 'function',
     description: 'Update an existing financial goal by its ID',
     parameters: {
       type: 'object',
@@ -120,6 +125,7 @@ const functions = [
   },
   {
     name: 'deleteGoal',
+    type: 'function',
     description: 'Delete a financial goal by its ID',
     parameters: {
       type: 'object',
