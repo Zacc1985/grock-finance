@@ -145,8 +145,8 @@ async function callGrokAPI(voiceText: string) {
           content: voiceText,
         },
       ],
-      functions,
-      function_call: 'auto',
+      tools: functions,
+      tool_choice: 'auto',
     };
     console.log('Request body:', JSON.stringify(requestBody));
     const response = await axios.post(
@@ -159,9 +159,14 @@ async function callGrokAPI(voiceText: string) {
         },
       }
     );
+    console.log('Full Grok API response:', JSON.stringify(response.data));
     return response.data;
-  } catch (error) {
-    console.error('Error calling Grok API:', error);
+  } catch (error: any) {
+    if (error && error.response && error.response.data) {
+      console.error('Error calling Grok API:', JSON.stringify(error.response.data));
+    } else {
+      console.error('Error calling Grok API:', error?.message || error);
+    }
     throw error;
   }
 }
@@ -184,25 +189,25 @@ export async function POST(req: Request) {
 
     // Process with Grok
     const grokResponse = await callGrokAPI(voiceText);
-    const functionCall = grokResponse.choices[0].message.function_call;
+    const toolCall = grokResponse.choices[0].message.tool_calls?.[0];
 
-    if (!functionCall) {
-      throw new Error('No function call generated');
+    if (!toolCall) {
+      throw new Error('No tool call generated');
     }
 
-    // Log the AI function call
+    // Log the AI tool call
     const aiFunctionCall = await prisma.aIFunctionCall.create({
       data: {
-        name: functionCall.name,
-        parameters: JSON.parse(functionCall.arguments),
+        name: toolCall.function.name,
+        parameters: JSON.parse(toolCall.function.arguments),
         processingTime: Date.now() - startTime,
       },
     });
 
     // Execute the function
     let result;
-    if (functionCall.name === 'addTransaction') {
-      const params = JSON.parse(functionCall.arguments);
+    if (toolCall.function.name === 'addTransaction') {
+      const params = JSON.parse(toolCall.function.arguments);
       const category = await prisma.category.upsert({
         where: { name: params.category },
         create: { name: params.category },
@@ -216,7 +221,6 @@ export async function POST(req: Request) {
           description: params.description,
           categoryId: category.id,
           tags: JSON.stringify(params.tags || []),
-          // Add Grok's analysis of the transaction
           aiAnalysis: JSON.stringify({
             sentiment: grokResponse.choices[0].message.content,
             confidence: grokResponse.choices[0].message.score || 1.0,
@@ -224,15 +228,14 @@ export async function POST(req: Request) {
           })
         },
       });
-    } else if (functionCall.name === 'createGoal') {
-      const params = JSON.parse(functionCall.arguments);
+    } else if (toolCall.function.name === 'createGoal') {
+      const params = JSON.parse(toolCall.function.arguments);
       result = await prisma.goal.create({
         data: {
           name: params.name,
           targetAmount: params.targetAmount,
           deadline: params.deadline ? new Date(params.deadline) : null,
           status: 'IN_PROGRESS',
-          // Add Grok's suggestions for achieving the goal
           aiSuggestions: JSON.stringify({
             recommendations: grokResponse.choices[0].message.suggestions || [],
             timeline: grokResponse.choices[0].message.timeline || {},
@@ -240,8 +243,8 @@ export async function POST(req: Request) {
           })
         },
       });
-    } else if (functionCall.name === 'updateTransaction') {
-      const params = JSON.parse(functionCall.arguments);
+    } else if (toolCall.function.name === 'updateTransaction') {
+      const params = JSON.parse(toolCall.function.arguments);
       const updateData: any = {};
       if (params.amount !== undefined) updateData.amount = params.amount;
       if (params.description !== undefined) updateData.description = params.description;
@@ -259,13 +262,13 @@ export async function POST(req: Request) {
         where: { id: params.id },
         data: updateData,
       });
-    } else if (functionCall.name === 'deleteTransaction') {
-      const params = JSON.parse(functionCall.arguments);
+    } else if (toolCall.function.name === 'deleteTransaction') {
+      const params = JSON.parse(toolCall.function.arguments);
       result = await prisma.transaction.delete({
         where: { id: params.id },
       });
-    } else if (functionCall.name === 'updateGoal') {
-      const params = JSON.parse(functionCall.arguments);
+    } else if (toolCall.function.name === 'updateGoal') {
+      const params = JSON.parse(toolCall.function.arguments);
       const updateData: any = {};
       if (params.name !== undefined) updateData.name = params.name;
       if (params.targetAmount !== undefined) updateData.targetAmount = params.targetAmount;
@@ -275,8 +278,8 @@ export async function POST(req: Request) {
         where: { id: params.id },
         data: updateData,
       });
-    } else if (functionCall.name === 'deleteGoal') {
-      const params = JSON.parse(functionCall.arguments);
+    } else if (toolCall.function.name === 'deleteGoal') {
+      const params = JSON.parse(toolCall.function.arguments);
       result = await prisma.goal.delete({
         where: { id: params.id },
       });
@@ -294,8 +297,8 @@ export async function POST(req: Request) {
     await prisma.voiceCommand.update({
       where: { id: voiceCommand.id },
       data: {
-        intent: functionCall.name,
-        parameters: functionCall.arguments,
+        intent: toolCall.function.name,
+        parameters: toolCall.function.arguments,
         success: true,
         processingTime: Date.now() - startTime,
       },
