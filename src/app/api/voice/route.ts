@@ -195,11 +195,20 @@ export async function POST(req: Request) {
       throw new Error('No tool call generated');
     }
 
+    // Safely parse function arguments
+    let parsedArgs;
+    try {
+      parsedArgs = JSON.parse(toolCall.function.arguments);
+    } catch (error) {
+      console.error('Error parsing function arguments:', error);
+      throw new Error('Invalid function arguments format');
+    }
+
     // Log the AI tool call
     const aiFunctionCall = await prisma.aIFunctionCall.create({
       data: {
         name: toolCall.function.name,
-        parameters: JSON.parse(toolCall.function.arguments),
+        parameters: JSON.stringify(parsedArgs),
         processingTime: Date.now() - startTime,
       },
     });
@@ -207,34 +216,32 @@ export async function POST(req: Request) {
     // Execute the function
     let result;
     if (toolCall.function.name === 'addTransaction') {
-      const params = JSON.parse(toolCall.function.arguments);
       const category = await prisma.category.upsert({
-        where: { name: params.category },
-        create: { name: params.category },
+        where: { name: parsedArgs.category },
+        create: { name: parsedArgs.category },
         update: {},
       });
 
       result = await prisma.transaction.create({
         data: {
-          amount: params.amount,
-          type: params.type,
-          description: params.description,
+          amount: parsedArgs.amount,
+          type: parsedArgs.type,
+          description: parsedArgs.description,
           categoryId: category.id,
-          tags: JSON.stringify(params.tags || []),
+          tags: JSON.stringify(parsedArgs.tags || []),
           aiAnalysis: JSON.stringify({
-            sentiment: grokResponse.choices[0].message.content,
+            sentiment: grokResponse.choices[0].message.content || '',
             confidence: grokResponse.choices[0].message.score || 1.0,
             suggestions: grokResponse.choices[0].message.suggestions || []
           })
         },
       });
     } else if (toolCall.function.name === 'createGoal') {
-      const params = JSON.parse(toolCall.function.arguments);
       result = await prisma.goal.create({
         data: {
-          name: params.name,
-          targetAmount: params.targetAmount,
-          deadline: params.deadline ? new Date(params.deadline) : null,
+          name: parsedArgs.name,
+          targetAmount: parsedArgs.targetAmount,
+          deadline: parsedArgs.deadline ? new Date(parsedArgs.deadline) : null,
           status: 'IN_PROGRESS',
           aiSuggestions: JSON.stringify({
             recommendations: grokResponse.choices[0].message.suggestions || [],
@@ -244,44 +251,40 @@ export async function POST(req: Request) {
         },
       });
     } else if (toolCall.function.name === 'updateTransaction') {
-      const params = JSON.parse(toolCall.function.arguments);
       const updateData: any = {};
-      if (params.amount !== undefined) updateData.amount = params.amount;
-      if (params.description !== undefined) updateData.description = params.description;
-      if (params.type !== undefined) updateData.type = params.type;
-      if (params.tags !== undefined) updateData.tags = JSON.stringify(params.tags);
-      if (params.category !== undefined) {
+      if (parsedArgs.amount !== undefined) updateData.amount = parsedArgs.amount;
+      if (parsedArgs.description !== undefined) updateData.description = parsedArgs.description;
+      if (parsedArgs.type !== undefined) updateData.type = parsedArgs.type;
+      if (parsedArgs.tags !== undefined) updateData.tags = JSON.stringify(parsedArgs.tags);
+      if (parsedArgs.category !== undefined) {
         const category = await prisma.category.upsert({
-          where: { name: params.category },
-          create: { name: params.category },
+          where: { name: parsedArgs.category },
+          create: { name: parsedArgs.category },
           update: {},
         });
         updateData.categoryId = category.id;
       }
       result = await prisma.transaction.update({
-        where: { id: params.id },
+        where: { id: parsedArgs.id },
         data: updateData,
       });
     } else if (toolCall.function.name === 'deleteTransaction') {
-      const params = JSON.parse(toolCall.function.arguments);
       result = await prisma.transaction.delete({
-        where: { id: params.id },
+        where: { id: parsedArgs.id },
       });
     } else if (toolCall.function.name === 'updateGoal') {
-      const params = JSON.parse(toolCall.function.arguments);
       const updateData: any = {};
-      if (params.name !== undefined) updateData.name = params.name;
-      if (params.targetAmount !== undefined) updateData.targetAmount = params.targetAmount;
-      if (params.deadline !== undefined) updateData.deadline = new Date(params.deadline);
-      if (params.status !== undefined) updateData.status = params.status;
+      if (parsedArgs.name !== undefined) updateData.name = parsedArgs.name;
+      if (parsedArgs.targetAmount !== undefined) updateData.targetAmount = parsedArgs.targetAmount;
+      if (parsedArgs.deadline !== undefined) updateData.deadline = new Date(parsedArgs.deadline);
+      if (parsedArgs.status !== undefined) updateData.status = parsedArgs.status;
       result = await prisma.goal.update({
-        where: { id: params.id },
+        where: { id: parsedArgs.id },
         data: updateData,
       });
     } else if (toolCall.function.name === 'deleteGoal') {
-      const params = JSON.parse(toolCall.function.arguments);
       result = await prisma.goal.delete({
-        where: { id: params.id },
+        where: { id: parsedArgs.id },
       });
     }
 
@@ -298,7 +301,7 @@ export async function POST(req: Request) {
       where: { id: voiceCommand.id },
       data: {
         intent: toolCall.function.name,
-        parameters: toolCall.function.arguments,
+        parameters: JSON.stringify(parsedArgs),
         success: true,
         processingTime: Date.now() - startTime,
       },
