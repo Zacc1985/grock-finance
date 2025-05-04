@@ -68,6 +68,59 @@ const functions = [
       required: ['name', 'targetAmount'],
     },
   },
+  {
+    name: 'updateTransaction',
+    description: 'Update an existing transaction by its ID',
+    parameters: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'ID of the transaction to update' },
+        amount: { type: 'number', description: 'New amount (optional)' },
+        description: { type: 'string', description: 'New description (optional)' },
+        category: { type: 'string', description: 'New category (optional)' },
+        type: { type: 'string', enum: ['INCOME', 'EXPENSE'], description: 'New type (optional)' },
+        tags: { type: 'array', items: { type: 'string' }, description: 'New tags (optional)' },
+      },
+      required: ['id'],
+    },
+  },
+  {
+    name: 'deleteTransaction',
+    description: 'Delete a transaction by its ID',
+    parameters: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'ID of the transaction to delete' },
+      },
+      required: ['id'],
+    },
+  },
+  {
+    name: 'updateGoal',
+    description: 'Update an existing financial goal by its ID',
+    parameters: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'ID of the goal to update' },
+        name: { type: 'string', description: 'New name (optional)' },
+        targetAmount: { type: 'number', description: 'New target amount (optional)' },
+        deadline: { type: 'string', description: 'New deadline (optional, ISO date string)' },
+        status: { type: 'string', enum: ['IN_PROGRESS', 'COMPLETED', 'FAILED'], description: 'New status (optional)' },
+      },
+      required: ['id'],
+    },
+  },
+  {
+    name: 'deleteGoal',
+    description: 'Delete a financial goal by its ID',
+    parameters: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'ID of the goal to delete' },
+      },
+      required: ['id'],
+    },
+  },
 ];
 
 async function callGrokAPI(voiceText: string) {
@@ -113,7 +166,7 @@ export async function POST(req: Request) {
       data: {
         rawText: voiceText,
         intent: 'PROCESSING',
-        parameters: {},
+        parameters: JSON.stringify({}),
         success: false,
         processingTime: 0,
       },
@@ -152,13 +205,13 @@ export async function POST(req: Request) {
           type: params.type,
           description: params.description,
           categoryId: category.id,
-          tags: params.tags || [],
+          tags: JSON.stringify(params.tags || []),
           // Add Grok's analysis of the transaction
-          aiAnalysis: {
+          aiAnalysis: JSON.stringify({
             sentiment: grokResponse.choices[0].message.content,
             confidence: grokResponse.choices[0].message.score || 1.0,
             suggestions: grokResponse.choices[0].message.suggestions || []
-          }
+          })
         },
       });
     } else if (functionCall.name === 'createGoal') {
@@ -170,12 +223,52 @@ export async function POST(req: Request) {
           deadline: params.deadline ? new Date(params.deadline) : null,
           status: 'IN_PROGRESS',
           // Add Grok's suggestions for achieving the goal
-          aiSuggestions: {
+          aiSuggestions: JSON.stringify({
             recommendations: grokResponse.choices[0].message.suggestions || [],
             timeline: grokResponse.choices[0].message.timeline || {},
             strategy: grokResponse.choices[0].message.strategy || ''
-          }
+          })
         },
+      });
+    } else if (functionCall.name === 'updateTransaction') {
+      const params = JSON.parse(functionCall.arguments);
+      const updateData: any = {};
+      if (params.amount !== undefined) updateData.amount = params.amount;
+      if (params.description !== undefined) updateData.description = params.description;
+      if (params.type !== undefined) updateData.type = params.type;
+      if (params.tags !== undefined) updateData.tags = JSON.stringify(params.tags);
+      if (params.category !== undefined) {
+        const category = await prisma.category.upsert({
+          where: { name: params.category },
+          create: { name: params.category },
+          update: {},
+        });
+        updateData.categoryId = category.id;
+      }
+      result = await prisma.transaction.update({
+        where: { id: params.id },
+        data: updateData,
+      });
+    } else if (functionCall.name === 'deleteTransaction') {
+      const params = JSON.parse(functionCall.arguments);
+      result = await prisma.transaction.delete({
+        where: { id: params.id },
+      });
+    } else if (functionCall.name === 'updateGoal') {
+      const params = JSON.parse(functionCall.arguments);
+      const updateData: any = {};
+      if (params.name !== undefined) updateData.name = params.name;
+      if (params.targetAmount !== undefined) updateData.targetAmount = params.targetAmount;
+      if (params.deadline !== undefined) updateData.deadline = new Date(params.deadline);
+      if (params.status !== undefined) updateData.status = params.status;
+      result = await prisma.goal.update({
+        where: { id: params.id },
+        data: updateData,
+      });
+    } else if (functionCall.name === 'deleteGoal') {
+      const params = JSON.parse(functionCall.arguments);
+      result = await prisma.goal.delete({
+        where: { id: params.id },
       });
     }
 
@@ -183,13 +276,7 @@ export async function POST(req: Request) {
     await prisma.aIFunctionCall.update({
       where: { id: aiFunctionCall.id },
       data: { 
-        result: result || {},
-        // Store Grok's specific insights
-        aiAnalysis: {
-          rawResponse: grokResponse.choices[0].message,
-          confidence: grokResponse.choices[0].message.score || 1.0,
-          context: grokResponse.choices[0].message.context || {}
-        }
+        result: JSON.stringify(result || {}),
       },
     });
 
@@ -198,7 +285,7 @@ export async function POST(req: Request) {
       where: { id: voiceCommand.id },
       data: {
         intent: functionCall.name,
-        parameters: JSON.parse(functionCall.arguments),
+        parameters: functionCall.arguments,
         success: true,
         processingTime: Date.now() - startTime,
       },
