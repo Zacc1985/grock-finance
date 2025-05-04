@@ -7,10 +7,18 @@ const prisma = new PrismaClient();
 // Grok API configuration
 const GROK_API_URL = process.env.GROK_API_URL;
 const GROK_API_KEY = process.env.GROK_API_KEY;
+const GROK_MODEL = process.env.GROK_MODEL;
+
+const DEFAULT_GROK_MODEL = 'grok-3-mini-beta';
+const modelToUse = GROK_MODEL && GROK_MODEL.trim() !== '' ? GROK_MODEL : DEFAULT_GROK_MODEL;
+console.log('GROK_MODEL (from env):', GROK_MODEL);
+console.log('Model used in request:', modelToUse);
 
 if (!GROK_API_URL || !GROK_API_KEY) {
   throw new Error('Missing required environment variables for Grok API');
 }
+
+console.log('GROK_MODEL:', GROK_MODEL); // Debug: log the model name
 
 // Define function schemas for Grok function calling
 const functions = [
@@ -125,22 +133,25 @@ const functions = [
 
 async function callGrokAPI(voiceText: string) {
   try {
+    const requestBody = {
+      model: modelToUse,
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a financial assistant that helps users track their spending and manage their budget. Convert voice commands into structured function calls.',
+        },
+        {
+          role: 'user',
+          content: voiceText,
+        },
+      ],
+      functions,
+      function_call: 'auto',
+    };
+    console.log('Request body:', JSON.stringify(requestBody));
     const response = await axios.post(
       GROK_API_URL,
-      {
-        messages: [
-          {
-            role: 'system',
-            content: 'You are a financial assistant that helps users track their spending and manage their budget. Convert voice commands into structured function calls.',
-          },
-          {
-            role: 'user',
-            content: voiceText,
-          },
-        ],
-        functions,
-        function_call: 'auto',
-      },
+      requestBody,
       {
         headers: {
           'Authorization': `Bearer ${GROK_API_KEY}`,
@@ -148,7 +159,6 @@ async function callGrokAPI(voiceText: string) {
         },
       }
     );
-
     return response.data;
   } catch (error) {
     console.error('Error calling Grok API:', error);
