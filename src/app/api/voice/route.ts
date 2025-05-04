@@ -23,116 +23,122 @@ console.log('GROK_MODEL:', GROK_MODEL); // Debug: log the model name
 // Define function schemas for Grok function calling
 const functions = [
   {
-    name: 'addTransaction',
-    type: 'function',
-    description: 'Add a new transaction to track spending or income',
-    parameters: {
-      type: 'object',
-      properties: {
-        amount: {
-          type: 'number',
-          description: 'The amount of money involved in the transaction',
+    function: {
+      name: 'addTransaction',
+      description: 'Add a new transaction to track spending or income',
+      parameters: {
+        type: 'object',
+        properties: {
+          amount: {
+            type: 'number',
+            description: 'The amount of money involved in the transaction',
+          },
+          type: {
+            type: 'string',
+            enum: ['INCOME', 'EXPENSE'],
+            description: 'Whether this is income or an expense',
+          },
+          description: {
+            type: 'string',
+            description: 'Description of the transaction',
+          },
+          category: {
+            type: 'string',
+            description: 'Category of the transaction (e.g., food, transport, salary)',
+          },
+          tags: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Tags to help categorize the transaction',
+          },
         },
-        type: {
-          type: 'string',
-          enum: ['INCOME', 'EXPENSE'],
-          description: 'Whether this is income or an expense',
-        },
-        description: {
-          type: 'string',
-          description: 'Description of the transaction',
-        },
-        category: {
-          type: 'string',
-          description: 'Category of the transaction (e.g., food, transport, salary)',
-        },
-        tags: {
-          type: 'array',
-          items: { type: 'string' },
-          description: 'Tags to help categorize the transaction',
-        },
+        required: ['amount', 'type', 'description', 'category'],
       },
-      required: ['amount', 'type', 'description', 'category'],
     },
   },
   {
-    name: 'createGoal',
-    type: 'function',
-    description: 'Create a new financial goal',
-    parameters: {
-      type: 'object',
-      properties: {
-        name: {
-          type: 'string',
-          description: 'Name of the financial goal',
+    function: {
+      name: 'createGoal',
+      description: 'Create a new financial goal',
+      parameters: {
+        type: 'object',
+        properties: {
+          name: {
+            type: 'string',
+            description: 'Name of the financial goal',
+          },
+          targetAmount: {
+            type: 'number',
+            description: 'Target amount to save or achieve',
+          },
+          deadline: {
+            type: 'string',
+            description: 'Deadline for achieving the goal (ISO date string)',
+          },
         },
-        targetAmount: {
-          type: 'number',
-          description: 'Target amount to save or achieve',
+        required: ['name', 'targetAmount'],
+      },
+    },
+  },
+  {
+    function: {
+      name: 'updateTransaction',
+      description: 'Update an existing transaction by its ID',
+      parameters: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', description: 'ID of the transaction to update' },
+          amount: { type: 'number', description: 'New amount (optional)' },
+          description: { type: 'string', description: 'New description (optional)' },
+          category: { type: 'string', description: 'New category (optional)' },
+          type: { type: 'string', enum: ['INCOME', 'EXPENSE'], description: 'New type (optional)' },
+          tags: { type: 'array', items: { type: 'string' }, description: 'New tags (optional)' },
         },
-        deadline: {
-          type: 'string',
-          description: 'Deadline for achieving the goal (ISO date string)',
+        required: ['id'],
+      },
+    },
+  },
+  {
+    function: {
+      name: 'deleteTransaction',
+      description: 'Delete a transaction by its ID',
+      parameters: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', description: 'ID of the transaction to delete' },
         },
+        required: ['id'],
       },
-      required: ['name', 'targetAmount'],
     },
   },
   {
-    name: 'updateTransaction',
-    type: 'function',
-    description: 'Update an existing transaction by its ID',
-    parameters: {
-      type: 'object',
-      properties: {
-        id: { type: 'string', description: 'ID of the transaction to update' },
-        amount: { type: 'number', description: 'New amount (optional)' },
-        description: { type: 'string', description: 'New description (optional)' },
-        category: { type: 'string', description: 'New category (optional)' },
-        type: { type: 'string', enum: ['INCOME', 'EXPENSE'], description: 'New type (optional)' },
-        tags: { type: 'array', items: { type: 'string' }, description: 'New tags (optional)' },
+    function: {
+      name: 'updateGoal',
+      description: 'Update an existing financial goal by its ID',
+      parameters: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', description: 'ID of the goal to update' },
+          name: { type: 'string', description: 'New name (optional)' },
+          targetAmount: { type: 'number', description: 'New target amount (optional)' },
+          deadline: { type: 'string', description: 'New deadline (optional, ISO date string)' },
+          status: { type: 'string', enum: ['IN_PROGRESS', 'COMPLETED', 'FAILED'], description: 'New status (optional)' },
+        },
+        required: ['id'],
       },
-      required: ['id'],
     },
   },
   {
-    name: 'deleteTransaction',
-    type: 'function',
-    description: 'Delete a transaction by its ID',
-    parameters: {
-      type: 'object',
-      properties: {
-        id: { type: 'string', description: 'ID of the transaction to delete' },
+    function: {
+      name: 'deleteGoal',
+      description: 'Delete a financial goal by its ID',
+      parameters: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', description: 'ID of the goal to delete' },
+        },
+        required: ['id'],
       },
-      required: ['id'],
-    },
-  },
-  {
-    name: 'updateGoal',
-    type: 'function',
-    description: 'Update an existing financial goal by its ID',
-    parameters: {
-      type: 'object',
-      properties: {
-        id: { type: 'string', description: 'ID of the goal to update' },
-        name: { type: 'string', description: 'New name (optional)' },
-        targetAmount: { type: 'number', description: 'New target amount (optional)' },
-        deadline: { type: 'string', description: 'New deadline (optional, ISO date string)' },
-        status: { type: 'string', enum: ['IN_PROGRESS', 'COMPLETED', 'FAILED'], description: 'New status (optional)' },
-      },
-      required: ['id'],
-    },
-  },
-  {
-    name: 'deleteGoal',
-    type: 'function',
-    description: 'Delete a financial goal by its ID',
-    parameters: {
-      type: 'object',
-      properties: {
-        id: { type: 'string', description: 'ID of the goal to delete' },
-      },
-      required: ['id'],
     },
   },
 ];
