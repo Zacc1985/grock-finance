@@ -21,14 +21,15 @@ export async function GET() {
     orderBy: { date: 'desc' },
     take: 50,
     select: {
+      id: true,
+      date: true,
       amount: true,
       description: true,
-      bucket: true,
     },
   });
 
   // Prepare a prompt for Grok
-  const prompt = `Here are the user's recent transactions for this month:\n${transactions.map(t => `- $${t.amount} for ${t.description} (${t.bucket})`).join('\n')}\n\nSummarize the user's spending habits in one sentence. Suggest one way they could save more next month. If possible, predict if they are on track with their 50/30/20 budget.`;
+  const prompt = `Here are the user's recent transactions for this month:\n${transactions.map(t => `- $${t.amount} for ${t.description}`).join('\n')}\n\nSummarize the user's spending habits in one sentence. Suggest one way they could save more next month. If possible, predict if they are on track with their 50/30/20 budget.`;
 
   try {
     const response = await axios.post(
