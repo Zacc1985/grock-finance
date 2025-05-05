@@ -19,9 +19,9 @@ export default function Home() {
               Try these voice commands:
             </p>
             <ul className="text-grock-200 space-y-2">
-              <li>"Add expense of 25 dollars for lunch in food category"</li>
-              <li>"Create a savings goal of 1000 dollars for vacation"</li>
-              <li>"Add income of 2000 dollars from salary"</li>
+              <li>"Add expense of 25 dollars for lunch in food category as a need"</li>
+              <li>"Add expense of 40 dollars for movie tickets in entertainment category as a want"</li>
+              <li>"Add income of 500 dollars to savings as a saving"</li>
             </ul>
           </div>
           <VoiceInput />

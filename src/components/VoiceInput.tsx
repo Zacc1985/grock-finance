@@ -92,6 +92,11 @@ export default function VoiceInput() {
       {result && (
         <div className="mt-4 p-4 bg-gray-800 rounded-lg w-full max-w-md">
           <h3 className="text-grock-100 font-bold mb-2">Last Action:</h3>
+          {result.bucket && (
+            <div className="mb-2 text-sm font-semibold text-grock-300">
+              50/30/20 Bucket: <span className="uppercase text-grock-400">{result.bucket}</span>
+            </div>
+          )}
           <pre className="text-sm text-grock-200 overflow-x-auto">
             {JSON.stringify(result, null, 2)}
           </pre>
