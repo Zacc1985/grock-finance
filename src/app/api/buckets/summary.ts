@@ -24,14 +24,14 @@ export async function GET() {
     const sum = await prisma.transaction.aggregate({
       _sum: { amount: true },
       where: {
-        bucket,
+        bucket: { equals: bucket },
         date: {
           gte: firstDay,
           lte: lastDay,
         },
       },
     });
-    totals[bucket] = sum._sum.amount || 0;
+    totals[bucket] = (sum._sum && sum._sum.amount) ? sum._sum.amount : 0;
   }
 
   // Calculate allowed and remaining for each bucket
