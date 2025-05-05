@@ -47,7 +47,6 @@ export async function GET(req: Request) {
     const sum = await prisma.transaction.aggregate({
       _sum: { amount: true },
       where: {
-        bucket: { equals: bucket },
         date: {
           gte: firstDay,
           lte: lastDay,
