@@ -3,6 +3,35 @@
 import React, { useEffect, useState } from 'react';
 import VoiceInput from '../components/VoiceInput';
 
+function AIInsight() {
+  const [insight, setInsight] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchInsight() {
+      setLoading(true);
+      try {
+        const res = await fetch('/api/ai/insights');
+        const data = await res.json();
+        setInsight(data.insight || 'No insight available.');
+      } catch (e) {
+        setInsight('Could not load AI insight.');
+      }
+      setLoading(false);
+    }
+    fetchInsight();
+  }, []);
+
+  return (
+    <div className="mb-6">
+      <div className="font-semibold text-grock-200 mb-1">AI Financial Insight:</div>
+      <div className="bg-gray-700 rounded-lg p-4 text-grock-100 text-sm">
+        {loading ? 'Loading insight...' : insight}
+      </div>
+    </div>
+  );
+}
+
 function BucketSummary() {
   const [report, setReport] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -91,6 +120,7 @@ export default function Home() {
           Your AI-powered financial assistant with the strength of Grock
         </p>
         <div className="max-w-2xl mx-auto bg-gray-800 rounded-lg shadow-xl p-6">
+          <AIInsight />
           <BucketSummary />
           <div className="text-center mb-8">
             <p className="text-lg mb-4">
