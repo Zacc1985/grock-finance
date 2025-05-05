@@ -8,9 +8,11 @@ interface Goal {
   name: string;
   targetAmount: number;
   currentAmount: number;
-  deadline?: string;
+  deadline: string | null;
   status: string;
-  category?: string;
+  category: {
+    name: string;
+  };
   aiInsights?: string;
 }
 
@@ -30,7 +32,8 @@ const GoalsPage: React.FC = () => {
     name: '',
     targetAmount: 0,
     currentAmount: 0,
-    category: 'SAVING',
+    category: { name: 'SAVING' },
+    deadline: null,
   });
   const [aiRecommendations, setAiRecommendations] = useState<AIRecommendation[]>([]);
   const [isListening, setIsListening] = useState(false);
@@ -119,27 +122,31 @@ const GoalsPage: React.FC = () => {
     }
   };
 
-  const handleCreateGoal = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       const response = await fetch('/api/goals', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify(newGoal),
       });
-      
+
       if (!response.ok) throw new Error('Failed to create goal');
       
-      await fetchGoals();
-      setShowForm(false);
+      // Reset form and refresh goals
       setNewGoal({
         name: '',
         targetAmount: 0,
         currentAmount: 0,
-        category: 'SAVING',
+        category: { name: 'SAVING' },
+        deadline: null,
       });
+      fetchGoals();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create goal');
+      setError('Failed to create goal');
+      console.error(err);
     }
   };
 
@@ -249,7 +256,7 @@ const GoalsPage: React.FC = () => {
       )}
 
       {showForm && (
-        <form onSubmit={handleCreateGoal} className="bg-gray-800 p-6 rounded-lg mb-6">
+        <form onSubmit={handleSubmit} className="bg-gray-800 p-6 rounded-lg mb-6">
           <h2 className="text-xl font-semibold mb-4">Create New Goal</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -265,8 +272,8 @@ const GoalsPage: React.FC = () => {
             <div>
               <label className="block text-sm font-medium mb-2">Category</label>
               <select
-                value={newGoal.category}
-                onChange={(e) => setNewGoal({ ...newGoal, category: e.target.value })}
+                value={newGoal.category?.name}
+                onChange={(e) => setNewGoal({ ...newGoal, category: { name: e.target.value } })}
                 className="w-full p-2 rounded bg-gray-700 border border-gray-600"
               >
                 <option value="SAVING">Saving</option>
@@ -294,6 +301,15 @@ const GoalsPage: React.FC = () => {
                 className="w-full p-2 rounded bg-gray-700 border border-gray-600"
                 required
                 min="0"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-2">Deadline</label>
+              <input
+                type="date"
+                value={newGoal.deadline ? new Date(newGoal.deadline).toISOString().split('T')[0] : ''}
+                onChange={(e) => setNewGoal({ ...newGoal, deadline: e.target.value ? e.target.value : null })}
+                className="w-full p-2 rounded bg-gray-700 border border-gray-600"
               />
             </div>
           </div>
@@ -329,7 +345,7 @@ const GoalsPage: React.FC = () => {
               <div className="flex justify-between items-start mb-4">
                 <div>
                   <h3 className="text-xl font-semibold">{goal.name}</h3>
-                  <p className="text-gray-400">{goal.category}</p>
+                  <p className="text-gray-400">{goal.category.name}</p>
                 </div>
                 <div className="text-right">
                   <p className="text-2xl font-bold text-grock-500">

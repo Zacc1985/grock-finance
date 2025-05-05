@@ -22,14 +22,15 @@ model Goal {
 }
 
 model Category {
-  id           String        @id @default(cuid())
-  name         String        @unique
-  budget       Float?
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  type         String
-  goals        Goal[]
-  transactions Transaction[]
+  id                String             @id @default(cuid())
+  name              String             @unique
+  type              String             // SAVING, INVESTMENT, DEBT
+  budget            Float?             // Optional budget amount for the category
+  goals             Goal[]
+  transactions      Transaction[]
+  recurringExpenses RecurringExpense[]
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
 }
 
 model Transaction {
@@ -64,4 +65,18 @@ model VoiceCommand {
   success        Boolean
   createdAt      DateTime @default(now())
   processingTime Int
+}
+
+model RecurringExpense {
+  id           String   @id @default(cuid())
+  name         String
+  amount       Float
+  frequency    String   // DAILY, WEEKLY, MONTHLY, YEARLY
+  nextDueDate  DateTime
+  category     Category @relation(fields: [categoryId], references: [id])
+  categoryId   String
+  bucket       String   // NEED, WANT, SAVING
+  isAutomatic  Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
