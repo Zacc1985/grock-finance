@@ -39,9 +39,14 @@ const tools = [
           category: {
             type: 'string',
             description: 'Category of the transaction (e.g., food, transport, salary)'
+          },
+          bucket: {
+            type: 'string',
+            enum: ['NEED', 'WANT', 'SAVING'],
+            description: 'Which 50/30/20 bucket this transaction belongs to'
           }
         },
-        required: ['amount', 'type', 'description', 'category']
+        required: ['amount', 'type', 'description', 'category', 'bucket']
       }
     }
   },
@@ -144,6 +149,7 @@ export async function POST(req: Request) {
           type: args.type,
           description: args.description,
           categoryId: category.id,
+          bucket: args.bucket,
           tags: JSON.stringify([]),
           aiAnalysis: JSON.stringify({
             sentiment: 'positive',
@@ -152,7 +158,7 @@ export async function POST(req: Request) {
           })
         }
       });
-      message = `Expense for ${args.description} added to ${args.category} category!`;
+      message = `Expense for ${args.description} added to ${args.category} category as a ${args.bucket}!`;
     } else if (toolCall.function.name === 'createGoal') {
       result = await prisma.goal.create({
         data: {

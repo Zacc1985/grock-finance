@@ -24,6 +24,7 @@ model Transaction {
   updatedAt   DateTime    @updatedAt
   goalId      String?     // Optional connection to a financial goal
   goal        Goal?       @relation(fields: [goalId], references: [id])
+  bucket      String      // 'NEED', 'WANT', or 'SAVING' for 50/30/20 rule
 }
 
 model Category {
