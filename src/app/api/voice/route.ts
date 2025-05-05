@@ -352,62 +352,57 @@ async function callGrokAPI(voiceText: string) {
 export async function POST(req: Request) {
   try {
     const { voiceText } = await req.json();
-    const startTime = Date.now();
-
-    // Log the voice command
-    const voiceCommand = await prisma.voiceCommand.create({
-      data: {
-        rawText: voiceText,
-        intent: 'PROCESSING',
-        parameters: JSON.stringify({}),
-        success: false,
-        processingTime: 0
-      }
-    });
-
-    // Process with Grok
-    const grokResponse = await callGrokAPI(voiceText);
-    const toolCall = grokResponse.choices[0].message.tool_calls?.[0];
-
-    if (!toolCall) {
-      throw new Error('No tool call generated');
-    }
-
-    // Parse function arguments
-    const args = JSON.parse(toolCall.function.arguments);
+    const response = await callGrokAPI(voiceText);
+    const toolCall = response.tool_calls[0];
 
     // Execute the function
     let result;
     let message = '';
     if (toolCall.function.name === 'addTransaction') {
+      const args = JSON.parse(toolCall.function.arguments);
       const category = await prisma.category.upsert({
         where: { name: args.category },
-        create: { name: args.category },
+        create: { 
+          name: args.category,
+          type: 'SAVING'
+        },
         update: {}
       });
 
       result = await prisma.transaction.create({
         data: {
           amount: args.amount,
-          type: args.type,
+          type: args.type || 'EXPENSE',
           description: args.description,
+          date: new Date(),
           categoryId: category.id,
-          bucket: args.bucket,
-          tags: JSON.stringify([]),
-          aiAnalysis: JSON.stringify({
-            sentiment: 'positive',
-            confidence: 1.0,
-            suggestions: []
-          })
-        } as any
+          bucket: args.bucket || 'NEED',
+          tags: '[]'
+        }
       });
-      message = `Expense for ${args.description} added to ${args.category} category as a ${args.bucket}!`;
+      message = `Transaction for ${args.description} added to ${args.category} category!`;
     } else if (toolCall.function.name === 'createGoal') {
+      const args = JSON.parse(toolCall.function.arguments);
+      const category = await prisma.category.upsert({
+        where: { name: args.category || 'Savings' },
+        create: { 
+          name: args.category || 'Savings',
+          type: 'SAVING'
+        },
+        update: {}
+      });
+
       result = await prisma.goal.create({
         data: {
           name: args.name,
           targetAmount: args.targetAmount,
+          currentAmount: 0,
           status: 'IN_PROGRESS',
+          category: {
+            connect: {
+              id: category.id
+            }
+          },
           aiSuggestions: JSON.stringify({
             recommendations: [],
             timeline: {},
@@ -417,7 +412,7 @@ export async function POST(req: Request) {
       });
       message = `Savings goal "${args.name}" for $${args.targetAmount} created!`;
     } else if (toolCall.function.name === 'listTransactions') {
-      // List transactions by filters
+      const args = JSON.parse(toolCall.function.arguments);
       const where: any = {};
       if (args.startDate) where.date = { gte: new Date(args.startDate) };
       if (args.endDate) where.date = { ...(where.date || {}), lte: new Date(args.endDate) };
@@ -431,12 +426,10 @@ export async function POST(req: Request) {
       });
       message = `Here are your recent transactions.`;
     } else if (toolCall.function.name === 'summarizeSpending') {
-      // Summarize spending
-      // TODO: Implement real summary logic
       message = 'Spending summary feature coming soon!';
       result = {};
     } else if (toolCall.function.name === 'updateGoal') {
-      // Update a goal
+      const args = JSON.parse(toolCall.function.arguments);
       const updateData: any = {};
       if (args.name) updateData.name = args.name;
       if (args.targetAmount) updateData.targetAmount = args.targetAmount;
@@ -448,24 +441,29 @@ export async function POST(req: Request) {
       result = await prisma.goal.update({ where: { id: args.goalId }, data: updateData });
       message = `Goal updated!`;
     } else if (toolCall.function.name === 'deleteTransaction') {
+      const args = JSON.parse(toolCall.function.arguments);
       await prisma.transaction.delete({ where: { id: args.transactionId } });
       result = { deleted: true };
       message = 'Transaction deleted.';
     } else if (toolCall.function.name === 'deleteGoal') {
+      const args = JSON.parse(toolCall.function.arguments);
       await prisma.goal.delete({ where: { id: args.goalId } });
       result = { deleted: true };
       message = 'Goal deleted.';
     } else if (toolCall.function.name === 'getBudgetStatus') {
-      // TODO: Implement real budget status logic
       message = 'Budget status feature coming soon!';
       result = {};
     } else if (toolCall.function.name === 'listGoals') {
-      result = await prisma.goal.findMany({ orderBy: { createdAt: 'desc' } });
+      result = await prisma.goal.findMany({ 
+        orderBy: { createdAt: 'desc' },
+        include: { category: true }
+      });
       message = 'Here are your goals.';
     } else if (toolCall.function.name === 'getHelp') {
       message = 'You can ask me to add expenses, create goals, list transactions, show budget status, and more!';
       result = {};
     } else if (toolCall.function.name === 'setCategoryBudget') {
+      const args = JSON.parse(toolCall.function.arguments);
       result = await prisma.category.update({ where: { name: args.category }, data: { budget: args.budget } });
       message = `Budget for ${args.category} set to $${args.budget}.`;
     } else if (toolCall.function.name === 'getFinancialTip') {
@@ -480,18 +478,28 @@ export async function POST(req: Request) {
       message = tip;
       result = { tip };
     } else if (toolCall.function.name === 'showRecentActivity') {
-      result = await prisma.transaction.findMany({ orderBy: { date: 'desc' }, take: 5, include: { category: true } });
+      result = await prisma.transaction.findMany({ 
+        orderBy: { date: 'desc' }, 
+        take: 5, 
+        include: { category: true } 
+      });
       message = 'Here is your recent activity.';
     } else if (toolCall.function.name === 'showGoalProgress') {
-      const goal = await prisma.goal.findUnique({ where: { id: args.goalId } });
+      const args = JSON.parse(toolCall.function.arguments);
+      const goal = await prisma.goal.findUnique({ 
+        where: { id: args.goalId },
+        include: { category: true }
+      });
       message = goal ? `Progress for goal ${goal.name}: $${goal.currentAmount} / $${goal.targetAmount}` : 'Goal not found.';
       result = goal;
     } else if (toolCall.function.name === 'suggestWaysToSave') {
-      // TODO: Implement real AI suggestions
       message = 'Try reducing spending in your top categories!';
       result = {};
     } else if (toolCall.function.name === 'showTopSpendingCategories') {
-      const txs = await prisma.transaction.findMany({ where: { type: 'EXPENSE' }, include: { category: true } });
+      const txs = await prisma.transaction.findMany({ 
+        where: { type: 'EXPENSE' }, 
+        include: { category: true } 
+      });
       const categoryTotals: Record<string, number> = {};
       txs.forEach(tx => {
         const cat = tx.category.name;
@@ -509,100 +517,13 @@ export async function POST(req: Request) {
     } else if (toolCall.function.name === 'listCommands') {
       message = 'Commands: addTransaction, createGoal, listTransactions, summarizeSpending, updateGoal, deleteTransaction, deleteGoal, getBudgetStatus, listGoals, getHelp, setCategoryBudget, getFinancialTip, showRecentActivity, showGoalProgress, suggestWaysToSave, showTopSpendingCategories, showIncomeVsExpenses, listCommands.';
       result = {};
-    } else if (toolCall.function.name === 'addRecurringExpense') {
-      const category = await prisma.category.upsert({
-        where: { name: args.category },
-        create: { name: args.category },
-        update: {}
-      });
-
-      result = await prisma.recurringExpense.create({
-        data: {
-          name: args.name,
-          amount: args.amount,
-          frequency: args.frequency,
-          nextDueDate: new Date(args.nextDueDate),
-          categoryId: category.id,
-          bucket: args.bucket,
-          isAutomatic: args.isAutomatic || false
-        }
-      });
-      message = `Added recurring expense "${args.name}" for $${args.amount} ${args.frequency.toLowerCase()}.`;
-    } else if (toolCall.function.name === 'getUpcomingExpenses') {
-      const days = args.days || 30;
-      const endDate = new Date();
-      endDate.setDate(endDate.getDate() + days);
-
-      result = await prisma.recurringExpense.findMany({
-        where: {
-          nextDueDate: {
-            lte: endDate
-          }
-        },
-        include: {
-          category: true
-        },
-        orderBy: {
-          nextDueDate: 'asc'
-        }
-      });
-      message = `Here are your upcoming expenses for the next ${days} days.`;
-    } else if (toolCall.function.name === 'getBudgetForecast') {
-      const days = args.days || 30;
-      const endDate = new Date();
-      endDate.setDate(endDate.getDate() + days);
-
-      // Get all recurring expenses due in the forecast period
-      const upcomingExpenses = await prisma.recurringExpense.findMany({
-        where: {
-          nextDueDate: {
-            lte: endDate
-          }
-        },
-        include: {
-          category: true
-        }
-      });
-
-      // Calculate total expected expenses by bucket
-      const forecast = {
-        NEED: 0,
-        WANT: 0,
-        SAVING: 0
-      };
-
-      upcomingExpenses.forEach(expense => {
-        forecast[expense.bucket as keyof typeof forecast] += expense.amount;
-      });
-
-      result = {
-        forecast,
-        upcomingExpenses,
-        period: `${days} days`
-      };
-      message = `Here's your budget forecast for the next ${days} days.`;
-    } else if (toolCall.function.name === 'setExpenseReminder') {
-      // TODO: Implement reminder system
-      message = `Reminder set for ${args.daysBefore} days before the expense.`;
-      result = { success: true };
     }
 
-    // Update the voice command status
-    await prisma.voiceCommand.update({
-      where: { id: voiceCommand.id },
-      data: {
-        intent: toolCall.function.name,
-        parameters: JSON.stringify(args),
-        success: true,
-        processingTime: Date.now() - startTime
-      }
-    });
-
-    return NextResponse.json({ success: true, result, message });
+    return NextResponse.json({ message, result });
   } catch (error) {
     console.error('Error processing voice command:', error);
     return NextResponse.json(
-      { success: false, error: 'Failed to process voice command' },
+      { error: 'Failed to process voice command' },
       { status: 500 }
     );
   }

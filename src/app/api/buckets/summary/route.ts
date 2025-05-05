@@ -78,22 +78,35 @@ export async function GET(req: Request) {
 
   // Category breakdown
   const categories = await prisma.category.findMany({
-    include: {
-      transactions: {
+    select: {
+      id: true,
+      name: true,
+    },
+  });
+
+  // Get transactions for each category
+  const categoryTransactions = await Promise.all(
+    categories.map(async (category) => {
+      const transactions = await prisma.transaction.findMany({
         where: {
+          categoryId: category.id,
           date: {
             gte: firstDay,
             lte: lastDay,
           },
         },
-      },
-    },
-  });
-  const categoryBreakdown = categories.map((cat) => ({
-    name: cat.name,
-    total: cat.transactions.reduce((sum, t) => sum + t.amount, 0),
-    bucket: cat.transactions[0]?.bucket || '',
-  })).filter((c) => c.total > 0);
+        select: {
+          amount: true,
+        },
+      });
+      
+      const sum = transactions.reduce((acc, t) => acc + t.amount, 0);
+      return {
+        ...category,
+        total: sum,
+      };
+    })
+  );
 
   // Monthly/weekly report
   const report = {
@@ -101,7 +114,7 @@ export async function GET(req: Request) {
     totalSpent: summary.reduce((sum, b) => sum + b.spent, 0),
     totalSaved: summary.find((b) => b.bucket === 'SAVING')?.spent || 0,
     summary,
-    categoryBreakdown,
+    categoryBreakdown: categoryTransactions,
     alerts,
     suggestions,
   };
