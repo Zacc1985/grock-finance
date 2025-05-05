@@ -6,65 +6,58 @@ generator client {
 }
 
 datasource db {
-     provider = "postgresql"
-     url      = env("DATABASE_URL")
-   }
-
-model Transaction {
-  id          String      @id @default(cuid())
-  amount      Float
-  description String
-  category    Category    @relation(fields: [categoryId], references: [id])
-  categoryId  String
-  date        DateTime    @default(now())
-  type        String      // "INCOME" or "EXPENSE"
-  tags        String      // Store tags as JSON string
-  aiAnalysis  String?     // Store AI insights as JSON string
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-  goalId      String?     // Optional connection to a financial goal
-  goal        Goal?       @relation(fields: [goalId], references: [id])
-  bucket      String      // 'NEED', 'WANT', or 'SAVING' for 50/30/20 rule
-}
-
-model Category {
-  id           String        @id @default(cuid())
-  name         String        @unique
-  transactions Transaction[]
-  budget       Float?        // Monthly budget for this category
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model Goal {
-  id           String        @id @default(cuid())
-  name         String
-  targetAmount Float
-  currentAmount Float       @default(0)
-  deadline     DateTime?
-  status       String       // "IN_PROGRESS", "COMPLETED", "FAILED"
-  transactions Transaction[]
-  aiSuggestions String?     // Store AI-generated suggestions as JSON string
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+  id            String    @id @default(cuid())
+  name          String
+  targetAmount  Float
+  currentAmount Float
+  deadline      DateTime?
+  status        String    @default("IN_PROGRESS")
+  category      Category  @relation(fields: [categoryId], references: [id])
+  categoryId    String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Category {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  type      String   // SAVING, INVESTMENT, DEBT
+  goals     Goal[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Transaction {
+  id          String   @id @default(cuid())
+  amount      Float
+  description String
+  date        DateTime
+  category    String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model AIFunctionCall {
-  id           String     @id @default(cuid())
-  name         String     // Name of the function called
-  parameters   String     // Parameters passed to the function as JSON string
-  result       String?    // Result of the function call as JSON string
-  error        String?    // Error message if the call failed
-  createdAt    DateTime   @default(now())
-  processingTime Int      // Time taken to process in milliseconds
+  id             String   @id @default(cuid())
+  name           String
+  parameters     String
+  result         String?
+  error          String?
+  createdAt      DateTime @default(now())
+  processingTime Int
 }
 
 model VoiceCommand {
-  id           String     @id @default(cuid())
-  rawText      String     // The original voice command text
-  intent       String     // The interpreted intent
-  parameters   String     // Extracted parameters as JSON string
-  success      Boolean    // Whether the command was successfully executed
-  createdAt    DateTime   @default(now())
-  processingTime Int      // Time taken to process in milliseconds
-} 
+  id             String   @id @default(cuid())
+  rawText        String
+  intent         String
+  parameters     String
+  success        Boolean
+  createdAt      DateTime @default(now())
+  processingTime Int
+}

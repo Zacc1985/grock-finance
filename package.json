@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@headlessui/react": "^1.7.0",
-    "@heroicons/react": "^2.1.0",
+    "@heroicons/react": "^2.2.0",
     "@prisma/client": "^5.22.0",
     "ai": "^2.2.0",
     "axios": "^1.6.0",

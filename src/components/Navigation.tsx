@@ -7,7 +7,8 @@ import {
   HomeIcon, 
   ChartBarIcon,
   MicrophoneIcon,
-  CurrencyDollarIcon 
+  CurrencyDollarIcon,
+  CalendarIcon
 } from '@heroicons/react/24/outline';
 
 export default function Navigation() {
@@ -56,6 +57,16 @@ export default function Navigation() {
         >
           <CurrencyDollarIcon className="h-6 w-6" />
           <span className="mt-1 text-xs">Goals</span>
+        </Link>
+
+        <Link
+          href="/forecast"
+          className={`p-4 flex flex-col items-center text-sm ${
+            isActive('/forecast') ? 'text-grock-500' : 'text-gray-400 hover:text-grock-400'
+          }`}
+        >
+          <CalendarIcon className="h-6 w-6" />
+          <span className="mt-1 text-xs">Forecast</span>
         </Link>
       </div>
     </nav>
