@@ -41,7 +41,7 @@ export default function VoiceInput() {
           const data = await response.json();
           if (data.success) {
             setResult(data.result);
-            setFeedback('Command processed successfully!');
+            setFeedback(data.message || 'Command processed successfully!');
           } else {
             setFeedback('Error processing command. Please try again.');
           }
