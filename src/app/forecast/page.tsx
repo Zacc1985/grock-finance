@@ -34,22 +34,12 @@ const ForecastPage: React.FC = () => {
   useEffect(() => {
     const fetchForecast = async () => {
       try {
-        const response = await fetch('/api/voice', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            voiceText: 'get budget forecast for next 30 days'
-          })
-        });
-
+        const response = await fetch('/api/forecast');
         if (!response.ok) {
           throw new Error('Failed to fetch forecast');
         }
-
         const data = await response.json();
-        setForecast(data.result);
+        setForecast(data);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load forecast');
       } finally {

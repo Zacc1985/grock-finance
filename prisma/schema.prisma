@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -17,36 +14,36 @@ model Goal {
   currentAmount Float
   deadline      DateTime?
   status        String    @default("IN_PROGRESS")
-  category      Category  @relation(fields: [categoryId], references: [id])
-  categoryId    String
   aiSuggestions String    @default("{}")
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+  categoryId    String
+  category      Category  @relation(fields: [categoryId], references: [id])
 }
 
 model Category {
   id           String        @id @default(cuid())
   name         String        @unique
-  type         String        // SAVING, INVESTMENT, DEBT
-  budget       Float?        // Optional budget amount for the category
-  goals        Goal[]
-  transactions Transaction[]
+  budget       Float?
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
+  type         String
+  goals        Goal[]
+  transactions Transaction[]
 }
 
 model Transaction {
   id          String   @id @default(cuid())
   amount      Float
-  type        String   // INCOME, EXPENSE
   description String
-  date        DateTime
-  category    Category @relation(fields: [categoryId], references: [id])
   categoryId  String
-  bucket      String   // NEED, WANT, SAVING
+  date        DateTime
+  type        String
   tags        String   @default("[]")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  bucket      String
+  category    Category @relation(fields: [categoryId], references: [id])
 }
 
 model AIFunctionCall {

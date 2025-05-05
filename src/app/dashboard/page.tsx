@@ -5,7 +5,8 @@ import {
   ChartBarIcon, 
   CurrencyDollarIcon, 
   LightBulbIcon,
-  ArrowTrendingUpIcon 
+  ArrowTrendingUpIcon,
+  MicrophoneIcon
 } from '@heroicons/react/24/outline';
 
 interface Transaction {
@@ -41,6 +42,8 @@ export default function Dashboard() {
   const [goals, setGoals] = useState<Goal[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [isListening, setIsListening] = useState(false);
+  const [voiceMessage, setVoiceMessage] = useState('');
 
   useEffect(() => {
     const fetchData = async () => {
@@ -70,6 +73,31 @@ export default function Dashboard() {
     fetchData();
   }, []);
 
+  const handleVoiceCommand = async () => {
+    if (!voiceMessage.trim()) return;
+
+    try {
+      const response = await fetch('/api/voice', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ voiceText: voiceMessage })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to process voice command');
+      }
+
+      const data = await response.json();
+      // Refresh data after successful command
+      window.location.reload();
+    } catch (err) {
+      setError('Failed to process voice command');
+      console.error(err);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -90,6 +118,32 @@ export default function Dashboard() {
     <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800 text-white p-6">
       <h1 className="text-4xl font-bold mb-8">Financial Dashboard</h1>
       
+      {/* Voice Command Interface */}
+      <div className="bg-gray-800 rounded-xl p-6 shadow-xl mb-8">
+        <div className="flex items-center mb-4">
+          <MicrophoneIcon className="h-8 w-8 text-grock-500 mr-3" />
+          <h2 className="text-xl font-semibold">Voice Commands</h2>
+        </div>
+        <div className="flex gap-4">
+          <input
+            type="text"
+            value={voiceMessage}
+            onChange={(e) => setVoiceMessage(e.target.value)}
+            placeholder="Type or speak your command..."
+            className="flex-1 bg-gray-700 text-white rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-grock-500"
+          />
+          <button
+            onClick={handleVoiceCommand}
+            className="bg-grock-500 text-white px-6 py-2 rounded-lg hover:bg-grock-600 transition-colors"
+          >
+            Send
+          </button>
+        </div>
+        <p className="text-sm text-gray-400 mt-2">
+          Try saying things like "I spent $50 on groceries" or "How much did I spend on food this month?"
+        </p>
+      </div>
+
       {/* Grok's AI Insights Section */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
         <div className="bg-gray-800 rounded-xl p-6 shadow-xl">
