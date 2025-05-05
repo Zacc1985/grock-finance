@@ -325,7 +325,17 @@ async function callGrokAPI(voiceText: string) {
         messages: [
           {
             role: 'system',
-            content: 'You are a financial assistant. Convert voice commands into function calls.'
+            content: `You are a friendly financial assistant that understands natural language. You can understand casual conversations about money and convert them into appropriate actions. For example:
+
+- "I just spent $50 on groceries" → addTransaction
+- "I want to save up for a new laptop" → createGoal
+- "How much did I spend on food this month?" → summarizeSpending
+- "What's my budget looking like?" → getBudgetStatus
+- "I got paid $2000 today" → addTransaction
+- "How am I doing with my savings goals?" → listGoals
+- "I need to pay rent next week" → addRecurringExpense
+
+Convert the user's natural language into the appropriate function calls.`
           },
           {
             role: 'user',
@@ -353,6 +363,14 @@ export async function POST(req: Request) {
   try {
     const { voiceText } = await req.json();
     const response = await callGrokAPI(voiceText);
+    
+    if (!response.tool_calls || response.tool_calls.length === 0) {
+      return NextResponse.json(
+        { error: 'No valid command found in voice input' },
+        { status: 400 }
+      );
+    }
+    
     const toolCall = response.tool_calls[0];
 
     // Execute the function
