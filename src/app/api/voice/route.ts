@@ -362,16 +362,40 @@ Convert the user's natural language into the appropriate function calls.`
 export async function POST(req: Request) {
   try {
     const { voiceText } = await req.json();
-    const response = await callGrokAPI(voiceText);
-    
-    if (!response.tool_calls || response.tool_calls.length === 0) {
+    if (!voiceText) {
       return NextResponse.json(
-        { error: 'No valid command found in voice input' },
+        { error: 'No voice text provided' },
         { status: 400 }
       );
     }
+
+    const response = await callGrokAPI(voiceText);
     
+    // Check if response is valid
+    if (!response || typeof response !== 'object') {
+      return NextResponse.json(
+        { error: 'Invalid response from Grok API' },
+        { status: 500 }
+      );
+    }
+
+    // Check if tool_calls exists and has items
+    if (!response.tool_calls || !Array.isArray(response.tool_calls) || response.tool_calls.length === 0) {
+      return NextResponse.json(
+        { error: 'No valid command found in voice input. Try rephrasing your request.' },
+        { status: 400 }
+      );
+    }
+
     const toolCall = response.tool_calls[0];
+    
+    // Validate tool call structure
+    if (!toolCall || !toolCall.function || !toolCall.function.name || !toolCall.function.arguments) {
+      return NextResponse.json(
+        { error: 'Invalid tool call structure from Grok API' },
+        { status: 500 }
+      );
+    }
 
     // Execute the function
     let result;
