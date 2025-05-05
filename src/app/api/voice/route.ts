@@ -130,6 +130,7 @@ export async function POST(req: Request) {
 
     // Execute the function
     let result;
+    let message = '';
     if (toolCall.function.name === 'addTransaction') {
       const category = await prisma.category.upsert({
         where: { name: args.category },
@@ -151,6 +152,7 @@ export async function POST(req: Request) {
           })
         }
       });
+      message = `Expense for ${args.description} added to ${args.category} category!`;
     } else if (toolCall.function.name === 'createGoal') {
       result = await prisma.goal.create({
         data: {
@@ -164,6 +166,7 @@ export async function POST(req: Request) {
           })
         }
       });
+      message = `Savings goal "${args.name}" for $${args.targetAmount} created!`;
     }
 
     // Update the voice command status
@@ -177,7 +180,7 @@ export async function POST(req: Request) {
       }
     });
 
-    return NextResponse.json({ success: true, result });
+    return NextResponse.json({ success: true, result, message });
   } catch (error) {
     console.error('Error processing voice command:', error);
     return NextResponse.json(
