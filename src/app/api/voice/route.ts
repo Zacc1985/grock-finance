@@ -325,17 +325,7 @@ async function callGrokAPI(voiceText: string) {
         messages: [
           {
             role: 'system',
-            content: `You are a friendly financial assistant that understands natural language. You can understand casual conversations about money and convert them into appropriate actions. For example:
-
-- "I just spent $50 on groceries" → addTransaction
-- "I want to save up for a new laptop" → createGoal
-- "How much did I spend on food this month?" → summarizeSpending
-- "What's my budget looking like?" → getBudgetStatus
-- "I got paid $2000 today" → addTransaction
-- "How am I doing with my savings goals?" → listGoals
-- "I need to pay rent next week" → addRecurringExpense
-
-Convert the user's natural language into the appropriate function calls.`
+            content: `You are a friendly financial assistant that understands natural language. You can understand casual conversations about money and convert them into appropriate actions. For example:\n\n- \"I just spent $50 on groceries\" → addTransaction\n- \"I want to save up for a new laptop\" → createGoal\n- \"How much did I spend on food this month?\" → summarizeSpending\n- \"Show me my travel expenses from last year\" → summarizeSpending\n- \"Remind me to pay my credit card bill\" → addRecurringExpense\n- \"How much money do I have left this month?\" → getBudgetStatus\n- \"What are my top spending categories?\" → showTopSpendingCategories\n- \"Give me a financial tip\" → getFinancialTip\n- \"Show my recent activity\" → showRecentActivity\n- \"List all my goals\" → listGoals\n- \"Delete my last transaction\" → deleteTransaction\n- \"Update my savings goal for a new car\" → updateGoal\n\nConvert the user's natural language into the appropriate function calls. If you are unsure, return a help message or suggest the user ask for help.`
           },
           {
             role: 'user',
@@ -382,7 +372,7 @@ export async function POST(req: Request) {
     // Check if tool_calls exists and has items
     if (!response.tool_calls || !Array.isArray(response.tool_calls) || response.tool_calls.length === 0) {
       return NextResponse.json(
-        { error: 'No valid command found in voice input. Try rephrasing your request.' },
+        { error: 'Sorry, I didn't understand that. Try rephrasing, or ask "What can you do?" for help.' },
         { status: 400 }
       );
     }
