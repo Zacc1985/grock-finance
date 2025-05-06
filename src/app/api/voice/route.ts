@@ -372,7 +372,7 @@ export async function POST(req: Request) {
     // Check if tool_calls exists and has items
     if (!response.tool_calls || !Array.isArray(response.tool_calls) || response.tool_calls.length === 0) {
       return NextResponse.json(
-        { error: 'Sorry, I didn't understand that. Try rephrasing, or ask "What can you do?" for help.' },
+        { error: "Sorry, I didn't understand that. Try rephrasing, or ask \"What can you do?\" for help." },
         { status: 400 }
       );
     }
