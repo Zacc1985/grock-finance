@@ -15,12 +15,12 @@ if (!GROK_API_URL || !GROK_API_KEY) {
   throw new Error('Missing required environment variables for Grok API');
 }
 
-if (!WHISPER_API_KEY) {
-  throw new Error('Missing required environment variable for Whisper API');
-}
-
 // Function to convert audio to text using Whisper
 async function convertAudioToText(audioData: Buffer): Promise<string> {
+  if (!WHISPER_API_KEY) {
+    throw new Error('Whisper API key is required for voice processing');
+  }
+
   try {
     console.log('Converting audio to text using Whisper...');
     
