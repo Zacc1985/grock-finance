@@ -4,16 +4,48 @@ import axios from 'axios';
 
 const prisma = new PrismaClient();
 
-// Grok API configuration
+// API configuration
 const GROK_API_URL = process.env.GROK_API_URL;
 const GROK_API_KEY = process.env.GROK_API_KEY;
 const GROK_MODEL = process.env.GROK_MODEL || 'grok-3-mini-beta';
+const WHISPER_API_URL = process.env.WHISPER_API_URL || 'https://api.openai.com/v1/audio/transcriptions';
+const WHISPER_API_KEY = process.env.WHISPER_API_KEY;
 
 if (!GROK_API_URL || !GROK_API_KEY) {
   throw new Error('Missing required environment variables for Grok API');
 }
 
-// Define tools for Grok API
+if (!WHISPER_API_KEY) {
+  throw new Error('Missing required environment variable for Whisper API');
+}
+
+// Function to convert audio to text using Whisper
+async function convertAudioToText(audioData: Buffer): Promise<string> {
+  try {
+    console.log('Converting audio to text using Whisper...');
+    
+    // Create form data for the audio file
+    const formData = new FormData();
+    formData.append('file', new Blob([audioData]), 'audio.webm');
+    formData.append('model', 'whisper-1');
+    formData.append('language', 'en');
+
+    const response = await axios.post(WHISPER_API_URL, formData, {
+      headers: {
+        'Authorization': `Bearer ${WHISPER_API_KEY}`,
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+
+    console.log('Whisper response:', response.data);
+    return response.data.text;
+  } catch (error: any) {
+    console.error('Error converting audio to text:', error.response?.data || error.message);
+    throw new Error('Failed to convert audio to text');
+  }
+}
+
+// Grok API configuration
 const tools = [
   {
     type: 'function',
@@ -318,6 +350,7 @@ const tools = [
 
 async function callGrokAPI(voiceText: string) {
   try {
+    console.log('Calling Grok API with text:', voiceText);
     const response = await axios.post(
       GROK_API_URL,
       {
@@ -342,27 +375,44 @@ async function callGrokAPI(voiceText: string) {
         }
       }
     );
+    console.log('Grok API response:', JSON.stringify(response.data, null, 2));
     return response.data;
-  } catch (error) {
-    console.error('Error calling Grok API:', error);
+  } catch (error: any) {
+    console.error('Error calling Grok API:', error.response?.data || error.message);
     throw error;
   }
 }
 
 export async function POST(req: Request) {
   try {
-    const { voiceText } = await req.json();
-    if (!voiceText) {
+    // Get the audio data from the request
+    const audioData = await req.arrayBuffer();
+    if (!audioData || audioData.byteLength === 0) {
+      console.error('No audio data provided in request');
       return NextResponse.json(
-        { error: 'No voice text provided' },
+        { error: 'No audio data provided' },
         { status: 400 }
       );
     }
 
+    // Convert audio to text
+    const voiceText = await convertAudioToText(Buffer.from(audioData));
+    console.log('Converted voice text:', voiceText);
+
+    if (!voiceText) {
+      console.error('Failed to convert audio to text');
+      return NextResponse.json(
+        { error: 'Failed to convert audio to text' },
+        { status: 400 }
+      );
+    }
+
+    // Process the text with Grok
     const response = await callGrokAPI(voiceText);
     
     // Check if response is valid
     if (!response || typeof response !== 'object') {
+      console.error('Invalid response from Grok API:', response);
       return NextResponse.json(
         { error: 'Invalid response from Grok API' },
         { status: 500 }
@@ -371,6 +421,7 @@ export async function POST(req: Request) {
 
     // Check if tool_calls exists and has items
     if (!response.tool_calls || !Array.isArray(response.tool_calls) || response.tool_calls.length === 0) {
+      console.error('No tool calls in response:', response);
       return NextResponse.json(
         { error: "Sorry, I didn't understand that. Try rephrasing, or ask \"What can you do?\" for help." },
         { status: 400 }
@@ -378,9 +429,11 @@ export async function POST(req: Request) {
     }
 
     const toolCall = response.tool_calls[0];
+    console.log('Processing tool call:', JSON.stringify(toolCall, null, 2));
     
     // Validate tool call structure
     if (!toolCall || !toolCall.function || !toolCall.function.name || !toolCall.function.arguments) {
+      console.error('Invalid tool call structure:', toolCall);
       return NextResponse.json(
         { error: 'Invalid tool call structure from Grok API' },
         { status: 500 }
