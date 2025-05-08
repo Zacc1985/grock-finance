@@ -11,84 +11,91 @@ declare global {
 }
 
 export default function VoiceInput() {
-  const [isListening, setIsListening] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
+  const [audioChunks, setAudioChunks] = useState<Blob[]>([]);
   const [feedback, setFeedback] = useState('');
   const [result, setResult] = useState<any>(null);
 
-  const startListening = useCallback(async () => {
+  useEffect(() => {
+    if (!isRecording && audioChunks.length > 0) {
+      handleUpload();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRecording]);
+
+  const startRecording = async () => {
+    setFeedback('Requesting microphone...');
     try {
-      setIsListening(true);
-      setFeedback('Listening...');
-
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      const recognition = new SpeechRecognition();
-      
-      recognition.continuous = false;
-      recognition.interimResults = false;
-      recognition.lang = 'en-US';
-
-      recognition.onresult = async (event: any) => {
-        const voiceText = event.results[0][0].transcript;
-        setFeedback(`Processing: "${voiceText}"`);
-
-        try {
-          const response = await fetch('/api/voice', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ voiceText }),
-          });
-
-          const data = await response.json();
-          if (data.success) {
-            setResult(data.result);
-            setFeedback(data.message || 'Command processed successfully!');
-          } else {
-            setFeedback('Error processing command. Please try again.');
-          }
-        } catch (error) {
-          console.error('Error processing voice command:', error);
-          setFeedback('Error processing command. Please try again.');
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      setMediaRecorder(recorder);
+      setAudioChunks([]);
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          setAudioChunks((prev) => [...prev, event.data]);
         }
       };
-
-      recognition.onerror = (event: any) => {
-        console.error('Speech recognition error:', event.error);
-        setFeedback('Error with speech recognition. Please try again.');
-        setIsListening(false);
+      recorder.onstop = () => {
+        setIsRecording(false);
       };
-
-      recognition.onend = () => {
-        setIsListening(false);
-      };
-
-      recognition.start();
+      recorder.start();
+      setIsRecording(true);
+      setFeedback('Recording... Click stop when done.');
     } catch (error) {
-      console.error('Error starting speech recognition:', error);
-      setFeedback('Speech recognition not supported in this browser.');
-      setIsListening(false);
+      setFeedback('Microphone access denied or not supported.');
     }
-  }, []);
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorder && isRecording) {
+      mediaRecorder.stop();
+      setFeedback('Processing audio...');
+    }
+  };
+
+  const handleUpload = async () => {
+    if (audioChunks.length === 0) return;
+    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+    const formData = new FormData();
+    formData.append('file', audioBlob, 'audio.webm');
+    setFeedback('Uploading and transcribing...');
+    try {
+      const response = await fetch('/api/voice', {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await response.json();
+      if (data.message) {
+        setResult(data.result);
+        setFeedback(data.message);
+      } else {
+        setFeedback('Error processing command. Please try again.');
+      }
+    } catch (error) {
+      setFeedback('Error uploading audio. Please try again.');
+    } finally {
+      setAudioChunks([]);
+    }
+  };
 
   return (
     <div className="flex flex-col items-center space-y-4 p-4">
       <button
-        onClick={startListening}
-        disabled={isListening}
+        onClick={isRecording ? stopRecording : startRecording}
         className={`px-6 py-3 rounded-full text-white font-bold transition-all ${
-          isListening
-            ? 'bg-grock-600 cursor-not-allowed'
+          isRecording
+            ? 'bg-red-600 hover:bg-red-700'
             : 'bg-grock-500 hover:bg-grock-600 hover:shadow-lg'
         }`}
       >
-        {isListening ? 'Listening...' : 'Start Voice Command'}
+        {isRecording ? 'Stop Recording' : 'Start Voice Command'}
       </button>
-      
       {feedback && (
         <p className="text-grock-100 bg-gray-800 px-4 py-2 rounded-lg">
           {feedback}
         </p>
       )}
-      
       {result && (
         <div className="mt-4 p-4 bg-gray-800 rounded-lg w-full max-w-md">
           <h3 className="text-grock-100 font-bold mb-2">Last Action:</h3>
