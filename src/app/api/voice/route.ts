@@ -577,11 +577,8 @@ async function processTransaction(amount: number, description: string, category:
   }
 }
 
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
+export const bodyParser = false;
+export const runtime = 'nodejs';
 
 export async function POST(req: Request) {
   try {
