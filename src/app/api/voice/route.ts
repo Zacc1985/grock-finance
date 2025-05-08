@@ -17,29 +17,26 @@ if (!GROK_API_URL || !GROK_API_KEY) {
   throw new Error('Missing required environment variables for Grok API');
 }
 
-// Function to convert audio to text using Grok
+// Function to convert audio to text using OpenAI Whisper
 async function convertAudioToText(audioData: Buffer): Promise<string> {
-  try {
-    console.log('Converting audio to text using Grok...');
-    
-    // Create form data for the audio file
-    const formData = new FormData();
-    formData.append('file', new Blob([audioData]), 'audio.webm');
-    formData.append('model', GROK_MODEL);
+  if (!OPENAI_API_KEY) throw new Error('Missing OpenAI API key');
+  const formData = new FormData();
+  formData.append('file', new Blob([audioData]), 'audio.webm');
+  formData.append('model', 'whisper-1');
+  formData.append('language', 'en');
 
-    const response = await axios.post(GROK_API_URL, formData, {
+  const response = await axios.post(
+    'https://api.openai.com/v1/audio/transcriptions',
+    formData,
+    {
       headers: {
-        'Authorization': `Bearer ${GROK_API_KEY}`,
-        'Content-Type': 'multipart/form-data',
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        // 'Content-Type' will be set automatically by FormData
+        ...((formData as any).getHeaders?.() || {})
       },
-    });
-
-    console.log('Grok response:', response.data);
-    return response.data.text;
-  } catch (error: any) {
-    console.error('Error converting audio to text:', error.response?.data || error.message);
-    throw new Error('Failed to convert audio to text');
-  }
+    }
+  );
+  return response.data.text;
 }
 
 // Function to get budget status for a category
