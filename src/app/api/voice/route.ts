@@ -10,6 +10,9 @@ const GROK_API_URL = process.env.GROK_API_URL;
 const GROK_API_KEY = process.env.GROK_API_KEY;
 const GROK_MODEL = process.env.GROK_MODEL || 'grok-3-mini-beta';
 
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
+
 if (!GROK_API_URL || !GROK_API_KEY) {
   throw new Error('Missing required environment variables for Grok API');
 }
@@ -449,6 +452,35 @@ async function callGrokAPI(voiceText: string) {
   }
 }
 
+// Function to call OpenAI for chat parsing
+async function callOpenAI(userInput: string): Promise<string> {
+  if (!OPENAI_API_KEY) throw new Error('Missing OpenAI API key');
+  const response = await axios.post(
+    OPENAI_API_URL,
+    {
+      model: 'gpt-3.5-turbo',
+      messages: [
+        {
+          role: 'system',
+          content: `You are a budgeting assistant. Your job is to understand casual spending inputs and turn them into structured commands for an API. For example:
+- Input: "I bought a #7 from McDonald's today" → Output: { "function": "add_expense", "amount": 7.50, "category": "food", "date": "2023-10-17" }
+- Input: "I spent $20 on gas yesterday" → Output: { "function": "add_expense", "amount": 20, "category": "transport", "date": "2023-10-16" }
+If details are missing, assume common prices or ask for clarification. Respond in a fun, conversational tone with some random commentary.`
+        },
+        { role: 'user', content: userInput }
+      ],
+      temperature: 0.7
+    },
+    {
+      headers: {
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        'Content-Type': 'application/json'
+      }
+    }
+  );
+  return response.data.choices[0].message.content;
+}
+
 // Enhanced transaction processing with budget tracking
 async function processTransaction(amount: number, description: string, category: string, bucket: string, type: string = 'EXPENSE') {
   try {
@@ -545,217 +577,62 @@ export async function POST(req: Request) {
     // Get the audio data from the request
     const audioData = await req.arrayBuffer();
     if (!audioData || audioData.byteLength === 0) {
-      console.error('No audio data provided in request');
       return NextResponse.json(
         { error: 'No audio data provided' },
         { status: 400 }
       );
     }
 
-    // Convert audio to text
+    // Convert audio to text (using Grok or your existing method)
     const voiceText = await convertAudioToText(Buffer.from(audioData));
-    console.log('Converted voice text:', voiceText);
-
     if (!voiceText) {
-      console.error('Failed to convert audio to text');
       return NextResponse.json(
         { error: 'Failed to convert audio to text' },
         { status: 400 }
       );
     }
 
-    // Process the text with Grok
-    const response = await callGrokAPI(voiceText);
-    
-    // Check if response is valid
-    if (!response || typeof response !== 'object') {
-      console.error('Invalid response from Grok API:', response);
-      return NextResponse.json(
-        { error: 'Invalid response from Grok API' },
-        { status: 500 }
-      );
+    // Use OpenAI to parse the text and get a structured command
+    const openAIResponse = await callOpenAI(voiceText);
+    let structuredCommand;
+    try {
+      structuredCommand = JSON.parse(openAIResponse);
+    } catch (e) {
+      // If OpenAI didn't return valid JSON, just return the text
+      return NextResponse.json({ message: openAIResponse });
     }
 
-    // Check if tool_calls exists and has items
-    if (!response.tool_calls || !Array.isArray(response.tool_calls) || response.tool_calls.length === 0) {
-      console.error('No tool calls in response:', response);
-      return NextResponse.json(
-        { error: "Sorry, I didn't understand that. Try rephrasing, or ask \"What can you do?\" for help." },
-        { status: 400 }
-      );
-    }
-
-    const toolCall = response.tool_calls[0];
-    console.log('Processing tool call:', JSON.stringify(toolCall, null, 2));
-    
-    // Validate tool call structure
-    if (!toolCall || !toolCall.function || !toolCall.function.name || !toolCall.function.arguments) {
-      console.error('Invalid tool call structure:', toolCall);
-      return NextResponse.json(
-        { error: 'Invalid tool call structure from Grok API' },
-        { status: 500 }
-      );
-    }
-
-    // Execute the function
+    // Now pass the structured command to your Grok logic (simulate tool call)
+    // For example, if function is add_expense, call your addTransaction logic
     let result;
     let message = '';
-    if (toolCall.function.name === 'addTransaction') {
-      const args = JSON.parse(toolCall.function.arguments);
+    if (structuredCommand.function === 'add_expense') {
+      // Use your existing addTransaction logic here
       const category = await prisma.category.upsert({
-        where: { name: args.category },
-        create: { 
-          name: args.category,
-          budget: 0
-        },
+        where: { name: structuredCommand.category },
+        create: { name: structuredCommand.category, budget: 0 },
         update: {}
       });
-
       result = await prisma.transaction.create({
         data: {
-          amount: args.amount,
-          type: args.type || 'EXPENSE',
-          description: args.description,
-          date: new Date(),
+          amount: structuredCommand.amount,
+          type: 'EXPENSE',
+          description: structuredCommand.description || structuredCommand.category,
+          date: structuredCommand.date ? new Date(structuredCommand.date) : new Date(),
           categoryId: category.id,
-          bucket: args.bucket || 'NEED',
+          bucket: structuredCommand.bucket || 'NEED',
           tags: '[]'
         }
       });
-      message = `Transaction for ${args.description} added to ${args.category} category!`;
-    } else if (toolCall.function.name === 'createGoal') {
-      const args = JSON.parse(toolCall.function.arguments);
-      const category = await prisma.category.upsert({
-        where: { name: args.category || 'Savings' },
-        create: { 
-          name: args.category || 'Savings',
-          budget: 0
-        },
-        update: {}
-      });
-
-      result = await prisma.goal.create({
-        data: {
-          name: args.name,
-          targetAmount: args.targetAmount,
-          currentAmount: 0,
-          status: 'IN_PROGRESS',
-          categoryId: category.id,
-          aiSuggestions: JSON.stringify({
-            recommendations: [],
-            timeline: {},
-            strategy: ''
-          })
-        }
-      });
-      message = `Savings goal "${args.name}" for $${args.targetAmount} created!`;
-    } else if (toolCall.function.name === 'listTransactions') {
-      const args = JSON.parse(toolCall.function.arguments);
-      const where: any = {};
-      if (args.startDate) where.date = { gte: new Date(args.startDate) };
-      if (args.endDate) where.date = { ...(where.date || {}), lte: new Date(args.endDate) };
-      if (args.category) where.category = { name: args.category };
-      if (args.bucket) where.bucket = args.bucket;
-      result = await prisma.transaction.findMany({
-        where,
-        orderBy: { date: 'desc' },
-        take: 20,
-        include: { category: true }
-      });
-      message = `Here are your recent transactions.`;
-    } else if (toolCall.function.name === 'summarizeSpending') {
+      message = `Transaction for ${structuredCommand.description || structuredCommand.category} added to ${structuredCommand.category} category!`;
+    } else if (structuredCommand.function === 'get_spending') {
+      // Example: handle get_spending queries
+      // You can expand this logic as needed
       message = 'Spending summary feature coming soon!';
       result = {};
-    } else if (toolCall.function.name === 'updateGoal') {
-      const args = JSON.parse(toolCall.function.arguments);
-      const updateData: any = {};
-      if (args.name) updateData.name = args.name;
-      if (args.targetAmount) updateData.targetAmount = args.targetAmount;
-      if (args.status) updateData.status = args.status;
-      if (args.addAmount) {
-        const goal = await prisma.goal.findUnique({ where: { id: args.goalId } });
-        updateData.currentAmount = (goal?.currentAmount || 0) + args.addAmount;
-      }
-      result = await prisma.goal.update({ where: { id: args.goalId }, data: updateData });
-      message = `Goal updated!`;
-    } else if (toolCall.function.name === 'deleteTransaction') {
-      const args = JSON.parse(toolCall.function.arguments);
-      await prisma.transaction.delete({ where: { id: args.transactionId } });
-      result = { deleted: true };
-      message = 'Transaction deleted.';
-    } else if (toolCall.function.name === 'deleteGoal') {
-      const args = JSON.parse(toolCall.function.arguments);
-      await prisma.goal.delete({ where: { id: args.goalId } });
-      result = { deleted: true };
-      message = 'Goal deleted.';
-    } else if (toolCall.function.name === 'getBudgetStatus') {
-      message = 'Budget status feature coming soon!';
-      result = {};
-    } else if (toolCall.function.name === 'listGoals') {
-      result = await prisma.goal.findMany({ 
-        orderBy: { createdAt: 'desc' },
-        include: {
-          category: true
-        }
-      });
-      message = 'Here are your goals.';
-    } else if (toolCall.function.name === 'getHelp') {
-      message = 'You can ask me to add expenses, create goals, list transactions, show budget status, and more!';
-      result = {};
-    } else if (toolCall.function.name === 'setCategoryBudget') {
-      const args = JSON.parse(toolCall.function.arguments);
-      result = await prisma.category.update({ where: { name: args.category }, data: { budget: args.budget } });
-      message = `Budget for ${args.category} set to $${args.budget}.`;
-    } else if (toolCall.function.name === 'getFinancialTip') {
-      const tips = [
-        'Track your expenses daily to avoid surprises.',
-        'Set savings goals and automate transfers.',
-        'Review your subscriptions and cancel unused ones.',
-        'Try a no-spend challenge for a week.',
-        'Cook at home more often to save money.'
-      ];
-      const tip = tips[Math.floor(Math.random() * tips.length)];
-      message = tip;
-      result = { tip };
-    } else if (toolCall.function.name === 'showRecentActivity') {
-      result = await prisma.transaction.findMany({ 
-        orderBy: { date: 'desc' }, 
-        take: 5, 
-        include: { category: true } 
-      });
-      message = 'Here is your recent activity.';
-    } else if (toolCall.function.name === 'showGoalProgress') {
-      const args = JSON.parse(toolCall.function.arguments);
-      const goal = await prisma.goal.findUnique({ 
-        where: { id: args.goalId },
-        include: { category: true }
-      });
-      message = goal ? `Progress for goal ${goal.name}: $${goal.currentAmount} / $${goal.targetAmount}` : 'Goal not found.';
-      result = goal;
-    } else if (toolCall.function.name === 'suggestWaysToSave') {
-      message = 'Try reducing spending in your top categories!';
-      result = {};
-    } else if (toolCall.function.name === 'showTopSpendingCategories') {
-      const txs = await prisma.transaction.findMany({ 
-        where: { type: 'EXPENSE' }, 
-        include: { category: true } 
-      });
-      const categoryTotals: Record<string, number> = {};
-      txs.forEach(tx => {
-        const cat = tx.category.name;
-        categoryTotals[cat] = (categoryTotals[cat] || 0) + tx.amount;
-      });
-      const sorted = Object.entries(categoryTotals).sort((a, b) => b[1] - a[1]).slice(0, 3);
-      message = 'Top spending categories this month:';
-      result = sorted.map(([cat, amt]) => ({ category: cat, amount: amt }));
-    } else if (toolCall.function.name === 'showIncomeVsExpenses') {
-      const txs = await prisma.transaction.findMany();
-      const income = txs.filter(tx => tx.type === 'INCOME').reduce((sum, tx) => sum + tx.amount, 0);
-      const expenses = txs.filter(tx => tx.type === 'EXPENSE').reduce((sum, tx) => sum + tx.amount, 0);
-      message = `Income: $${income}, Expenses: $${expenses}`;
-      result = { income, expenses };
-    } else if (toolCall.function.name === 'listCommands') {
-      message = 'Commands: addTransaction, createGoal, listTransactions, summarizeSpending, updateGoal, deleteTransaction, deleteGoal, getBudgetStatus, listGoals, getHelp, setCategoryBudget, getFinancialTip, showRecentActivity, showGoalProgress, suggestWaysToSave, showTopSpendingCategories, showIncomeVsExpenses, listCommands.';
+    } else {
+      // Fallback: just return the OpenAI response
+      message = openAIResponse;
       result = {};
     }
 
