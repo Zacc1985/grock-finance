@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 import axios from 'axios';
 import { lookupPrice, analyzeSpendingPattern } from '@/lib/priceLookup';
+import FormData from 'form-data';
 
 const prisma = new PrismaClient();
 
@@ -17,11 +18,11 @@ if (!GROK_API_URL || !GROK_API_KEY) {
   throw new Error('Missing required environment variables for Grok API');
 }
 
-// Function to convert audio to text using OpenAI Whisper
+// Function to convert audio to text using OpenAI Whisper (Node.js compatible)
 async function convertAudioToText(audioData: Buffer): Promise<string> {
   if (!OPENAI_API_KEY) throw new Error('Missing OpenAI API key');
   const formData = new FormData();
-  formData.append('file', new Blob([audioData]), 'audio.webm');
+  formData.append('file', audioData, { filename: 'audio.webm' });
   formData.append('model', 'whisper-1');
   formData.append('language', 'en');
 
@@ -31,8 +32,7 @@ async function convertAudioToText(audioData: Buffer): Promise<string> {
     {
       headers: {
         'Authorization': `Bearer ${OPENAI_API_KEY}`,
-        // 'Content-Type' will be set automatically by FormData
-        ...((formData as any).getHeaders?.() || {})
+        ...formData.getHeaders()
       },
     }
   );
