@@ -24,7 +24,7 @@ model Goal {
 model Category {
   id                String             @id @default(cuid())
   name              String             @unique
-  type              String             // SAVING, INVESTMENT, DEBT
+  type              String?            // SAVING, INVESTMENT, DEBT (made optional)
   budget            Float?             // Optional budget amount for the category
   goals             Goal[]
   transactions      Transaction[]

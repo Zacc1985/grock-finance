@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 import axios from 'axios';
+import { lookupPrice, analyzeSpendingPattern } from '@/lib/priceLookup';
 
 const prisma = new PrismaClient();
 
@@ -8,36 +9,29 @@ const prisma = new PrismaClient();
 const GROK_API_URL = process.env.GROK_API_URL;
 const GROK_API_KEY = process.env.GROK_API_KEY;
 const GROK_MODEL = process.env.GROK_MODEL || 'grok-3-mini-beta';
-const WHISPER_API_URL = process.env.WHISPER_API_URL || 'https://api.openai.com/v1/audio/transcriptions';
-const WHISPER_API_KEY = process.env.WHISPER_API_KEY;
 
 if (!GROK_API_URL || !GROK_API_KEY) {
   throw new Error('Missing required environment variables for Grok API');
 }
 
-// Function to convert audio to text using Whisper
+// Function to convert audio to text using Grok
 async function convertAudioToText(audioData: Buffer): Promise<string> {
-  if (!WHISPER_API_KEY) {
-    throw new Error('Whisper API key is required for voice processing');
-  }
-
   try {
-    console.log('Converting audio to text using Whisper...');
+    console.log('Converting audio to text using Grok...');
     
     // Create form data for the audio file
     const formData = new FormData();
     formData.append('file', new Blob([audioData]), 'audio.webm');
-    formData.append('model', 'whisper-1');
-    formData.append('language', 'en');
+    formData.append('model', GROK_MODEL);
 
-    const response = await axios.post(WHISPER_API_URL, formData, {
+    const response = await axios.post(GROK_API_URL, formData, {
       headers: {
-        'Authorization': `Bearer ${WHISPER_API_KEY}`,
+        'Authorization': `Bearer ${GROK_API_KEY}`,
         'Content-Type': 'multipart/form-data',
       },
     });
 
-    console.log('Whisper response:', response.data);
+    console.log('Grok response:', response.data);
     return response.data.text;
   } catch (error: any) {
     console.error('Error converting audio to text:', error.response?.data || error.message);
@@ -45,37 +39,91 @@ async function convertAudioToText(audioData: Buffer): Promise<string> {
   }
 }
 
-// Grok API configuration
+// Function to get budget status for a category
+async function getBudgetStatus(categoryId: string, period: 'day' | 'week' | 'month' = 'month'): Promise<{
+  spent: number;
+  budget: number;
+  remaining: number;
+  percentage: number;
+}> {
+  const now = new Date();
+  let startDate = new Date();
+  
+  // Set start date based on period
+  if (period === 'day') {
+    startDate.setHours(0, 0, 0, 0);
+  } else if (period === 'week') {
+    startDate.setDate(now.getDate() - 7);
+  } else if (period === 'month') {
+    startDate.setDate(1);
+  }
+
+  // Get category budget
+  const category = await prisma.category.findUnique({
+    where: { id: categoryId }
+  });
+
+  const budget = category?.budget || 0;
+
+  // Get total spent in period
+  const spent = await prisma.transaction.aggregate({
+    where: {
+      categoryId,
+      date: { gte: startDate },
+      type: 'EXPENSE'
+    },
+    _sum: {
+      amount: true
+    }
+  });
+
+  const totalSpent = spent._sum.amount || 0;
+  const remaining = budget - totalSpent;
+  const percentage = budget > 0 ? (totalSpent / budget) * 100 : 0;
+
+  return {
+    spent: totalSpent,
+    budget,
+    remaining,
+    percentage
+  };
+}
+
+// Enhanced Grok API configuration with better natural language understanding
 const tools = [
   {
     type: 'function',
     function: {
       name: 'addTransaction',
-      description: 'Add a new transaction to track spending or income',
+      description: 'Add a new transaction to track spending or income. Understands casual inputs like "I bought a #7 from McDonald\'s" or "Spent $20 on gas"',
       parameters: {
         type: 'object',
         properties: {
           amount: {
             type: 'number',
-            description: 'The amount of money involved in the transaction'
+            description: 'The amount of money involved in the transaction. If not specified, try to look up common prices (e.g., McDonald\'s #7 is typically $7.50)'
           },
           type: {
             type: 'string',
             enum: ['INCOME', 'EXPENSE'],
-            description: 'Whether this is income or an expense'
+            description: 'Whether this is income or an expense. Default to EXPENSE for casual spending mentions'
           },
           description: {
             type: 'string',
-            description: 'Description of the transaction'
+            description: 'Description of the transaction. For casual inputs, expand abbreviations (e.g., "McD\'s" to "McDonald\'s")'
           },
           category: {
             type: 'string',
-            description: 'Category of the transaction (e.g., food, transport, salary)'
+            description: 'Category of the transaction. For casual inputs, infer from context (e.g., "McDonald\'s" → "Dining", "gas" → "Transport")'
           },
           bucket: {
             type: 'string',
             enum: ['NEED', 'WANT', 'SAVING'],
-            description: 'Which 50/30/20 bucket this transaction belongs to'
+            description: 'Which 50/30/20 bucket this transaction belongs to. Infer from context (e.g., "groceries" → NEED, "movie" → WANT)'
+          },
+          date: {
+            type: 'string',
+            description: 'Date of the transaction. Default to today if not specified'
           }
         },
         required: ['amount', 'type', 'description', 'category', 'bucket']
@@ -348,9 +396,11 @@ const tools = [
   }
 ];
 
+// Enhanced Grok API call with better context and personality
 async function callGrokAPI(voiceText: string) {
   try {
     console.log('Calling Grok API with text:', voiceText);
+    
     const response = await axios.post(
       GROK_API_URL,
       {
@@ -358,7 +408,23 @@ async function callGrokAPI(voiceText: string) {
         messages: [
           {
             role: 'system',
-            content: `You are a friendly financial assistant that understands natural language. You can understand casual conversations about money and convert them into appropriate actions. For example:\n\n- \"I just spent $50 on groceries\" → addTransaction\n- \"I want to save up for a new laptop\" → createGoal\n- \"How much did I spend on food this month?\" → summarizeSpending\n- \"Show me my travel expenses from last year\" → summarizeSpending\n- \"Remind me to pay my credit card bill\" → addRecurringExpense\n- \"How much money do I have left this month?\" → getBudgetStatus\n- \"What are my top spending categories?\" → showTopSpendingCategories\n- \"Give me a financial tip\" → getFinancialTip\n- \"Show my recent activity\" → showRecentActivity\n- \"List all my goals\" → listGoals\n- \"Delete my last transaction\" → deleteTransaction\n- \"Update my savings goal for a new car\" → updateGoal\n\nConvert the user's natural language into the appropriate function calls. If you are unsure, return a help message or suggest the user ask for help.`
+            content: `You are a friendly, conversational financial assistant. When processing transactions:
+            1. Understand casual language and common abbreviations
+            2. Look up common prices for known items (e.g., McDonald's #7 = $7.50)
+            3. Infer categories and buckets from context
+            4. Respond conversationally, like a friend helping with finances
+            5. Add helpful insights or gentle reminders about spending patterns
+            6. If information is missing, ask follow-up questions naturally
+            
+            Example inputs and responses:
+            User: "I bought a #7 from McDonald's"
+            Assistant: "Got it! I've logged $7.50 for your McDonald's #7 combo. That's your third fast food meal this week - maybe we should look at some home cooking options? 😊"
+            
+            User: "Spent $20 on gas"
+            Assistant: "Added your $20 gas expense to the NEED bucket. Your fuel spending is actually down 15% from last month - great job! 🚗"
+            
+            User: "Bought a new game for $60"
+            Assistant: "Logged your $60 game purchase in the WANT bucket. That's a bit higher than your usual entertainment spending - everything okay with the budget? 🎮"`
           },
           {
             role: 'user',
@@ -379,6 +445,97 @@ async function callGrokAPI(voiceText: string) {
     return response.data;
   } catch (error: any) {
     console.error('Error calling Grok API:', error.response?.data || error.message);
+    throw error;
+  }
+}
+
+// Enhanced transaction processing with budget tracking
+async function processTransaction(amount: number, description: string, category: string, bucket: string, type: string = 'EXPENSE') {
+  try {
+    // Look up price and details if not provided
+    const priceInfo = lookupPrice(description);
+    if (priceInfo && !amount) {
+      amount = priceInfo.price;
+      category = priceInfo.category;
+      bucket = priceInfo.bucket;
+    }
+
+    // Get recent transactions for pattern analysis
+    const recentTransactions = await prisma.transaction.findMany({
+      where: {
+        date: {
+          gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) // Last 7 days
+        }
+      },
+      orderBy: {
+        date: 'desc'
+      }
+    });
+
+    // First, ensure the category exists
+    const categoryRecord = await prisma.category.upsert({
+      where: { name: category },
+      update: {},
+      create: {
+        name: category,
+        budget: 0 // Optional, but good to have a default
+      }
+    });
+
+    // Add the new transaction
+    const transaction = await prisma.transaction.create({
+      data: {
+        amount,
+        description,
+        categoryId: categoryRecord.id,
+        type,
+        bucket,
+        date: new Date(),
+        tags: '[]' // Default empty tags array as JSON string
+      }
+    });
+
+    // Get budget status
+    const budgetStatus = await getBudgetStatus(categoryRecord.id);
+
+    // Analyze spending patterns
+    const patterns = analyzeSpendingPattern([...recentTransactions, transaction]);
+
+    // Generate a conversational response with budget info
+    let response = `Got it! I've logged $${amount.toFixed(2)} for ${description} in the ${bucket} bucket.`;
+    
+    // Add budget status
+    if (budgetStatus.budget > 0) {
+      response += `\nBudget Status for ${category}:`;
+      response += `\n- Spent: $${budgetStatus.spent.toFixed(2)}`;
+      response += `\n- Budget: $${budgetStatus.budget.toFixed(2)}`;
+      response += `\n- Remaining: $${budgetStatus.remaining.toFixed(2)}`;
+      
+      // Add budget warnings or encouragement
+      if (budgetStatus.percentage >= 90) {
+        response += `\n⚠️ You're at ${budgetStatus.percentage.toFixed(1)}% of your budget for ${category}!`;
+      } else if (budgetStatus.percentage >= 75) {
+        response += `\n⚠️ You're at ${budgetStatus.percentage.toFixed(1)}% of your budget for ${category}.`;
+      } else if (budgetStatus.remaining > 0) {
+        response += `\n✅ You're doing great with your ${category} budget!`;
+      }
+    }
+
+    // Add spending patterns
+    if (patterns) {
+      response += `\n${patterns}`;
+    }
+
+    // Add some personality based on the transaction and budget
+    if (bucket === 'WANT' && amount > 50) {
+      response += `\nThat's a bit of a splurge - everything okay with the budget? 😊`;
+    } else if (bucket === 'NEED' && amount < 20) {
+      response += `\nNice job keeping your essential spending low! 💪`;
+    }
+
+    return { transaction, response };
+  } catch (error) {
+    console.error('Error processing transaction:', error);
     throw error;
   }
 }
@@ -449,7 +606,7 @@ export async function POST(req: Request) {
         where: { name: args.category },
         create: { 
           name: args.category,
-          type: 'SAVING'
+          budget: 0
         },
         update: {}
       });
@@ -472,7 +629,7 @@ export async function POST(req: Request) {
         where: { name: args.category || 'Savings' },
         create: { 
           name: args.category || 'Savings',
-          type: 'SAVING'
+          budget: 0
         },
         update: {}
       });
@@ -483,11 +640,7 @@ export async function POST(req: Request) {
           targetAmount: args.targetAmount,
           currentAmount: 0,
           status: 'IN_PROGRESS',
-          category: {
-            connect: {
-              id: category.id
-            }
-          },
+          categoryId: category.id,
           aiSuggestions: JSON.stringify({
             recommendations: [],
             timeline: {},
@@ -541,7 +694,9 @@ export async function POST(req: Request) {
     } else if (toolCall.function.name === 'listGoals') {
       result = await prisma.goal.findMany({ 
         orderBy: { createdAt: 'desc' },
-        include: { category: true }
+        include: {
+          category: true
+        }
       });
       message = 'Here are your goals.';
     } else if (toolCall.function.name === 'getHelp') {
