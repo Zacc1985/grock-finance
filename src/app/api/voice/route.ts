@@ -18,25 +18,30 @@ if (!GROK_API_URL || !GROK_API_KEY) {
   throw new Error('Missing required environment variables for Grok API');
 }
 
-// Function to convert audio to text using OpenAI Whisper (Node.js compatible)
+// Function to convert audio to text using OpenAI Whisper (Node.js compatible, with contentType and error logging)
 async function convertAudioToText(audioData: Buffer): Promise<string> {
   if (!OPENAI_API_KEY) throw new Error('Missing OpenAI API key');
   const formData = new FormData();
-  formData.append('file', audioData, { filename: 'audio.webm' });
+  formData.append('file', audioData, { filename: 'audio.webm', contentType: 'audio/webm' });
   formData.append('model', 'whisper-1');
   formData.append('language', 'en');
 
-  const response = await axios.post(
-    'https://api.openai.com/v1/audio/transcriptions',
-    formData,
-    {
-      headers: {
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
-        ...formData.getHeaders()
-      },
-    }
-  );
-  return response.data.text;
+  try {
+    const response = await axios.post(
+      'https://api.openai.com/v1/audio/transcriptions',
+      formData,
+      {
+        headers: {
+          'Authorization': `Bearer ${OPENAI_API_KEY}`,
+          ...formData.getHeaders()
+        },
+      }
+    );
+    return response.data.text;
+  } catch (error: any) {
+    console.error('OpenAI Whisper API error:', error.response?.data || error.message);
+    throw new Error('Failed to convert audio to text');
+  }
 }
 
 // Function to get budget status for a category
