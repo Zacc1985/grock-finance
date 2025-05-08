@@ -3,6 +3,9 @@ import { PrismaClient } from '@prisma/client';
 import axios from 'axios';
 import { lookupPrice, analyzeSpendingPattern } from '@/lib/priceLookup';
 import FormData from 'form-data';
+import formidable from 'formidable';
+import { Readable } from 'stream';
+import fs from 'fs';
 
 const prisma = new PrismaClient();
 
@@ -574,26 +577,45 @@ async function processTransaction(amount: number, description: string, category:
   }
 }
 
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};
+
 export async function POST(req: Request) {
   try {
-    // Get the audio data from the request
-    const audioData = await req.arrayBuffer();
-    if (!audioData || audioData.byteLength === 0) {
+    // Parse multipart/form-data using formidable
+    const form = formidable({ multiples: false });
+    const parsed = await new Promise<{ fields: formidable.Fields; files: formidable.Files }>((resolve, reject) => {
+      form.parse(req as any, (err: any, fields: formidable.Fields, files: formidable.Files) => {
+        if (err) reject(err);
+        else resolve({ fields, files });
+      });
+    });
+    let file = parsed.files.file;
+    let typedFile: formidable.File | undefined;
+    if (Array.isArray(file)) {
+      typedFile = file[0] as unknown as formidable.File;
+    } else {
+      typedFile = file as unknown as formidable.File;
+    }
+    if (!typedFile || typeof typedFile.filepath !== 'string') {
       return NextResponse.json(
-        { error: 'No audio data provided' },
+        { error: 'No audio file provided' },
         { status: 400 }
       );
     }
-
-    // Convert audio to text (using Grok or your existing method)
-    const voiceText = await convertAudioToText(Buffer.from(audioData));
+    // Read file as buffer
+    const audioBuffer = await fs.promises.readFile(typedFile.filepath);
+    // Convert audio to text using Whisper
+    const voiceText = await convertAudioToText(audioBuffer);
     if (!voiceText) {
       return NextResponse.json(
         { error: 'Failed to convert audio to text' },
         { status: 400 }
       );
     }
-
     // Use OpenAI to parse the text and get a structured command
     const openAIResponse = await callOpenAI(voiceText);
     let structuredCommand;
@@ -603,13 +625,10 @@ export async function POST(req: Request) {
       // If OpenAI didn't return valid JSON, just return the text
       return NextResponse.json({ message: openAIResponse });
     }
-
     // Now pass the structured command to your Grok logic (simulate tool call)
-    // For example, if function is add_expense, call your addTransaction logic
     let result;
     let message = '';
     if (structuredCommand.function === 'add_expense') {
-      // Use your existing addTransaction logic here
       const category = await prisma.category.upsert({
         where: { name: structuredCommand.category },
         create: { name: structuredCommand.category, budget: 0 },
@@ -628,16 +647,12 @@ export async function POST(req: Request) {
       });
       message = `Transaction for ${structuredCommand.description || structuredCommand.category} added to ${structuredCommand.category} category!`;
     } else if (structuredCommand.function === 'get_spending') {
-      // Example: handle get_spending queries
-      // You can expand this logic as needed
       message = 'Spending summary feature coming soon!';
       result = {};
     } else {
-      // Fallback: just return the OpenAI response
       message = openAIResponse;
       result = {};
     }
-
     return NextResponse.json({ message, result });
   } catch (error) {
     console.error('Error processing voice command:', error);
