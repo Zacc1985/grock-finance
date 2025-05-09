@@ -163,7 +163,7 @@ export default function Dashboard() {
               <div key={tx.id} className="border-l-4 border-grock-500 pl-4">
                 <p className="text-sm text-gray-400">{new Date(tx.date).toLocaleDateString()}</p>
                 <p className="font-medium">{tx.description}</p>
-                <p className="text-sm text-grock-300">{tx.aiAnalysis.sentiment}</p>
+                <p className="text-sm text-grock-300">{tx.aiAnalysis?.sentiment ?? "No analysis"}</p>
               </div>
             ))}
           </div>
