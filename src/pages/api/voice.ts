@@ -2,8 +2,6 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import formidable from 'formidable';
 import fs from 'fs';
 import { PrismaClient } from '@prisma/client';
-import axios from 'axios';
-import FormData from 'form-data';
 
 const prisma = new PrismaClient();
 
@@ -13,171 +11,164 @@ export const config = {
   },
 };
 
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-
-async function convertAudioToText(audioData: Buffer): Promise<string> {
-  if (!OPENAI_API_KEY) throw new Error('Missing OpenAI API key');
-  const formData = new FormData();
-  formData.append('file', audioData, { filename: 'audio.webm', contentType: 'audio/webm' });
-  formData.append('model', 'whisper-1');
-  formData.append('language', 'en');
-  try {
-    const response = await axios.post(
-      'https://api.openai.com/v1/audio/transcriptions',
-      formData,
-      {
-        headers: {
-          'Authorization': `Bearer ${OPENAI_API_KEY}`,
-          ...formData.getHeaders()
-        },
-      }
-    );
-    return response.data.text;
-  } catch (error: any) {
-    console.error('OpenAI Whisper API error:', error.response?.data || error.message);
-    throw new Error('Failed to convert audio to text');
-  }
-}
-
-async function callOpenAI(userInput: string): Promise<string> {
-  if (!OPENAI_API_KEY) throw new Error('Missing OpenAI API key');
-  const response = await axios.post(
-    'https://api.openai.com/v1/chat/completions',
-    {
-      model: 'gpt-3.5-turbo',
-      messages: [
-        {
-          role: 'system',
-          content: `You are a budgeting assistant. Your job is to understand casual spending inputs and turn them into structured commands for an API. For example:\n- Input: "I bought a #7 from McDonald's today" → Output: { "function": "add_expense", "amount": 7.50, "category": "food", "date": "2023-10-17" }\n- Input: "I spent $20 on gas yesterday" → Output: { "function": "add_expense", "amount": 20, "category": "transport", "date": "2023-10-16" }\nIf details are missing, assume common prices or ask for clarification. Respond in a fun, conversational tone with some random commentary.`
-        },
-        { role: 'user', content: userInput }
-      ],
-      temperature: 0.7
-    },
-    {
-      headers: {
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
-        'Content-Type': 'application/json'
-      }
-    }
-  );
-  return response.data.choices[0].message.content;
-}
-
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
-    res.status(405).json({ error: 'Method not allowed' });
-    return;
+    return res.status(405).json({ error: 'Method not allowed' });
   }
-  const form = formidable({ multiples: false });
-  form.parse(req, async (err, fields, files) => {
-    if (err) {
-      res.status(500).json({ error: 'Error parsing form data' });
-      return;
+
+  try {
+    const form = formidable({});
+    const [fields, files] = await form.parse(req);
+    const audioFile = files.audio?.[0];
+
+    if (!audioFile) {
+      return res.status(400).json({ error: 'No audio file provided' });
     }
-    let file = files.file;
-    let typedFile: formidable.File | undefined;
-    if (Array.isArray(file)) {
-      typedFile = file[0] as unknown as formidable.File;
-    } else {
-      typedFile = file as unknown as formidable.File;
+
+    // Read the audio file
+    const audioBuffer = fs.readFileSync(audioFile.filepath);
+
+    // Call OpenAI Whisper API for transcription
+    const formData = new FormData();
+    formData.append('file', new Blob([audioBuffer]), 'audio.webm');
+    formData.append('model', 'whisper-1');
+
+    const whisperResponse = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+      },
+      body: formData,
+    });
+
+    if (!whisperResponse.ok) {
+      throw new Error('Failed to transcribe audio');
     }
-    if (!typedFile || typeof typedFile.filepath !== 'string') {
-      res.status(400).json({ error: 'No audio file provided' });
-      return;
+
+    const { text } = await whisperResponse.json();
+
+    // Process the transcribed text with OpenAI
+    const chatResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-3.5-turbo',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a budgeting assistant. Your job is to understand casual spending inputs and turn them into structured commands for an API. For example: "I bought a #7 from McDonald\'s today" → { "function": "add_expense", "amount": 7.50, "category": "food", "date": "2023-10-17" }. If details are missing, ask for clarification. Respond in a fun, conversational tone.'
+          },
+          {
+            role: 'user',
+            content: text
+          }
+        ],
+        functions: [
+          {
+            name: 'add_expense',
+            description: 'Add a new expense to the budget',
+            parameters: {
+              type: 'object',
+              properties: {
+                amount: {
+                  type: 'number',
+                  description: 'The amount of the expense'
+                },
+                category: {
+                  type: 'string',
+                  description: 'The category of the expense'
+                },
+                description: {
+                  type: 'string',
+                  description: 'A description of the expense'
+                },
+                date: {
+                  type: 'string',
+                  description: 'The date of the expense in YYYY-MM-DD format'
+                }
+              },
+              required: ['amount', 'category']
+            }
+          }
+        ],
+        function_call: 'auto'
+      }),
+    });
+
+    if (!chatResponse.ok) {
+      throw new Error('Failed to process text with OpenAI');
     }
-    try {
-      const audioBuffer = await fs.promises.readFile(typedFile.filepath);
-      const voiceText = await convertAudioToText(audioBuffer);
-      if (!voiceText) {
-        res.status(400).json({ error: 'Failed to convert audio to text' });
-        return;
-      }
-      const openAIResponse = await callOpenAI(voiceText);
-      let structuredCommand;
-      try {
-        structuredCommand = JSON.parse(openAIResponse);
-      } catch (e) {
-        res.status(200).json({ message: openAIResponse });
-        return;
-      }
-      let result;
-      let message = '';
-      if (structuredCommand.function === 'add_expense') {
-        const category = await prisma.category.upsert({
-          where: { name: structuredCommand.category },
-          create: { name: structuredCommand.category, budget: 0 },
-          update: {}
+
+    const chatData = await chatResponse.json();
+    const message = chatData.choices[0].message;
+
+    // Log the voice command
+    await prisma.voiceCommand.create({
+      data: {
+        rawText: text,
+        intent: message.function_call?.name || 'unknown',
+        parameters: JSON.stringify(message.function_call?.arguments || {}),
+        success: true,
+        processingTime: 0, // You might want to calculate this
+      },
+    });
+
+    // If there's a function call, process it
+    if (message.function_call) {
+      const { name, arguments: args } = message.function_call;
+      const parsedArgs = JSON.parse(args);
+
+      if (name === 'add_expense') {
+        // Find or create the category
+        let category = await prisma.category.findFirst({
+          where: { name: parsedArgs.category }
         });
-        result = await prisma.transaction.create({
+
+        if (!category) {
+          category = await prisma.category.create({
+            data: {
+              name: parsedArgs.category,
+              budget: 0, // You might want to set a default budget
+            },
+          });
+        }
+
+        // Create the transaction
+        const transaction = await prisma.transaction.create({
           data: {
-            amount: structuredCommand.amount,
-            type: 'EXPENSE',
-            description: structuredCommand.description || structuredCommand.category,
-            date: structuredCommand.date ? new Date(structuredCommand.date) : new Date(),
+            amount: parsedArgs.amount,
+            description: parsedArgs.description || 'Voice command expense',
             categoryId: category.id,
-            bucket: structuredCommand.bucket || 'NEED',
-            tags: '[]'
+            type: 'expense',
+            tags: JSON.stringify([]),
+            bucket: 'needs', // You might want to determine this based on the category
+          },
+        });
+
+        return res.status(200).json({
+          text,
+          message: `Added expense of $${parsedArgs.amount} to ${parsedArgs.category}`,
+          result: {
+            transaction,
+            category,
+            bucket: 'needs'
           }
         });
-        // Fetch current totals for this category and bucket
-        const [categoryTotal, bucketTotal, bucketBudget] = await Promise.all([
-          prisma.transaction.aggregate({
-            where: { categoryId: category.id, type: 'EXPENSE' },
-            _sum: { amount: true }
-          }),
-          prisma.transaction.aggregate({
-            where: { bucket: structuredCommand.bucket || 'NEED', type: 'EXPENSE' },
-            _sum: { amount: true }
-          }),
-          prisma.category.aggregate({
-            where: { },
-            _sum: { budget: true }
-          })
-        ]);
-        const catSpent = categoryTotal._sum.amount || 0;
-        const catBudget = category.budget || 0;
-        const bucketSpent = bucketTotal._sum.amount || 0;
-        // For bucket budget, sum all categories in this bucket
-        const bucketCategories = await prisma.category.findMany({
-          where: {},
-        });
-        const bucketCatIds = bucketCategories
-          .filter(cat => cat.name && cat.name.toLowerCase().includes((structuredCommand.bucket || 'NEED').toLowerCase()))
-          .map(cat => cat.id);
-        const bucketCatBudgets = bucketCategories
-          .filter(cat => cat.name && cat.name.toLowerCase().includes((structuredCommand.bucket || 'NEED').toLowerCase()))
-          .reduce((sum, cat) => sum + (cat.budget || 0), 0);
-        // Feedback message
-        let feedback = '';
-        if (catBudget > 0) {
-          feedback += `\nCategory '${category.name}': Spent $${catSpent.toFixed(2)} / Budget $${catBudget.toFixed(2)}.`;
-          if (catSpent > catBudget) {
-            feedback += ` Over budget by $${(catSpent - catBudget).toFixed(2)}!`;
-          } else {
-            feedback += ` $${(catBudget - catSpent).toFixed(2)} left in your category budget.`;
-          }
-        }
-        if (bucketCatBudgets > 0) {
-          feedback += `\nBucket '${structuredCommand.bucket || 'NEED'}': Spent $${bucketSpent.toFixed(2)} / Budget $${bucketCatBudgets.toFixed(2)}.`;
-          if (bucketSpent > bucketCatBudgets) {
-            feedback += ` Over budget by $${(bucketSpent - bucketCatBudgets).toFixed(2)}!`;
-          } else {
-            feedback += ` $${(bucketCatBudgets - bucketSpent).toFixed(2)} left in your bucket budget.`;
-          }
-        }
-        message = `Transaction for ${structuredCommand.description || structuredCommand.category} added to ${structuredCommand.category} category!${feedback}`;
-      } else if (structuredCommand.function === 'get_spending') {
-        message = 'Spending summary feature coming soon!';
-        result = {};
-      } else {
-        message = openAIResponse;
-        result = {};
       }
-      res.status(200).json({ message, result });
-    } catch (error) {
-      console.error('Error processing voice command:', error);
-      res.status(500).json({ error: 'Failed to process voice command' });
     }
-  });
+
+    // If no function call or not handled, return the assistant's message
+    return res.status(200).json({
+      text,
+      message: message.content,
+      result: null
+    });
+
+  } catch (error) {
+    console.error('Error processing voice command:', error);
+    return res.status(500).json({ error: 'Failed to process voice command' });
+  }
 } 
