@@ -145,6 +145,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             type: 'expense',
             tags: JSON.stringify([]),
             bucket: 'needs', // You might want to determine this based on the category
+            date: parsedArgs.date ? new Date(parsedArgs.date) : new Date(),
           },
         });
 
