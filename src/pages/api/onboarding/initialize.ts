@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
@@ -35,6 +35,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       })
     );
 
+    // Find the Savings category
+    const savingsCategory = categories.find(cat => cat.name === 'Savings');
+    if (!savingsCategory) {
+      throw new Error('Savings category not found');
+    }
+
     // Create a default savings goal
     const savingsGoal = await prisma.goal.create({
       data: {
@@ -43,7 +49,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         currentAmount: 0,
         status: 'IN_PROGRESS',
         deadline: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), // 1 year from now
-      },
+        categoryId: savingsCategory.id,
+      } as Prisma.GoalUncheckedCreateInput,
     });
 
     res.status(200).json({
