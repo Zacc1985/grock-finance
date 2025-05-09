@@ -1,7 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
-import { useCallback } from 'react';
+import React, { useState, useRef } from 'react';
 
 declare global {
   interface Window {
@@ -13,26 +12,12 @@ declare global {
 export default function VoiceInput({ onTranscriptionComplete }: { onTranscriptionComplete: (text: string) => void }) {
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [feedback, setFeedback] = useState('');
+  const [result, setResult] = useState<any>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastAudioLevelRef = useRef<number>(0);
-  const [feedback, setFeedback] = useState('');
-  const [result, setResult] = useState<any>(null);
-  const [conversation, setConversation] = useState([
-    {
-      role: 'system',
-      content:
-        'You are a budgeting assistant. Your job is to understand casual spending inputs and turn them into structured commands for an API. For example: "I bought a #7 from McDonald\'s today" → { "function": "add_expense", "amount": 7.50, "category": "food", "date": "2023-10-17" }. If details are missing, ask for clarification. Respond in a fun, conversational tone.'
-    }
-  ]);
-
-  useEffect(() => {
-    if (!isRecording && audioChunksRef.current.length > 0) {
-      handleUpload();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isRecording]);
 
   const startRecording = async () => {
     try {
@@ -99,10 +84,11 @@ export default function VoiceInput({ onTranscriptionComplete }: { onTranscriptio
 
       mediaRecorder.start(100); // Collect data every 100ms
       setIsRecording(true);
+      setFeedback('Recording...');
       checkAudioLevel();
     } catch (error) {
       console.error('Error accessing microphone:', error);
-      alert('Error accessing microphone. Please ensure you have granted microphone permissions.');
+      setFeedback('Error accessing microphone. Please ensure you have granted microphone permissions.');
     }
   };
 
@@ -110,6 +96,7 @@ export default function VoiceInput({ onTranscriptionComplete }: { onTranscriptio
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
+      setFeedback('Processing...');
     }
   };
 
@@ -129,42 +116,18 @@ export default function VoiceInput({ onTranscriptionComplete }: { onTranscriptio
       }
 
       const data = await response.json();
-      onTranscriptionComplete(data.text);
-    } catch (error) {
-      console.error('Error processing audio:', error);
-      alert('Error processing audio. Please try again.');
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const handleUpload = async () => {
-    if (audioChunksRef.current.length === 0) return;
-    const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-    const formData = new FormData();
-    formData.append('file', audioBlob, 'audio.webm');
-    formData.append('conversation', JSON.stringify(conversation));
-    setFeedback('Uploading and transcribing...');
-    try {
-      const response = await fetch('/api/voice', {
-        method: 'POST',
-        body: formData,
-      });
-      const data = await response.json();
       if (data.message) {
-        setConversation((prev) => [
-          ...prev,
-          { role: 'user', content: '[voice message]' },
-          { role: 'assistant', content: data.message }
-        ]);
-        setResult(data.result);
         setFeedback(data.message);
+        setResult(data.result);
+        onTranscriptionComplete(data.text);
       } else {
         setFeedback('Error processing command. Please try again.');
       }
     } catch (error) {
-      setFeedback('Error uploading audio. Please try again.');
+      console.error('Error processing audio:', error);
+      setFeedback('Error processing audio. Please try again.');
     } finally {
+      setIsProcessing(false);
       audioChunksRef.current = [];
     }
   };
