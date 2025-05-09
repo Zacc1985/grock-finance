@@ -110,6 +110,11 @@ function BucketSummary() {
 }
 
 export default function Home() {
+  const handleTranscriptionComplete = (text: string) => {
+    // Refresh the page data after a voice command is processed
+    window.location.reload();
+  };
+
   return (
     <main className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800 text-white">
       <div className="container mx-auto px-4 py-16">
@@ -132,7 +137,7 @@ export default function Home() {
               <li>"Add income of 500 dollars to savings as a saving"</li>
             </ul>
           </div>
-          <VoiceInput />
+          <VoiceInput onTranscriptionComplete={handleTranscriptionComplete} />
         </div>
       </div>
     </main>
