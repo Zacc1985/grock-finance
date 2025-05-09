@@ -16,6 +16,13 @@ export default function VoiceInput() {
   const [audioChunks, setAudioChunks] = useState<Blob[]>([]);
   const [feedback, setFeedback] = useState('');
   const [result, setResult] = useState<any>(null);
+  const [conversation, setConversation] = useState([
+    {
+      role: 'system',
+      content:
+        'You are a budgeting assistant. Your job is to understand casual spending inputs and turn them into structured commands for an API. For example: "I bought a #7 from McDonald\'s today" → { "function": "add_expense", "amount": 7.50, "category": "food", "date": "2023-10-17" }. If details are missing, ask for clarification. Respond in a fun, conversational tone.'
+    }
+  ]);
 
   useEffect(() => {
     if (!isRecording && audioChunks.length > 0) {
@@ -59,6 +66,7 @@ export default function VoiceInput() {
     const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
     const formData = new FormData();
     formData.append('file', audioBlob, 'audio.webm');
+    formData.append('conversation', JSON.stringify(conversation));
     setFeedback('Uploading and transcribing...');
     try {
       const response = await fetch('/api/voice', {
@@ -67,6 +75,11 @@ export default function VoiceInput() {
       });
       const data = await response.json();
       if (data.message) {
+        setConversation((prev) => [
+          ...prev,
+          { role: 'user', content: '[voice message]' },
+          { role: 'assistant', content: data.message }
+        ]);
         setResult(data.result);
         setFeedback(data.message);
       } else {

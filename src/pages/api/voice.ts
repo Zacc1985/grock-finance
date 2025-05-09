@@ -120,7 +120,53 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             tags: '[]'
           }
         });
-        message = `Transaction for ${structuredCommand.description || structuredCommand.category} added to ${structuredCommand.category} category!`;
+        // Fetch current totals for this category and bucket
+        const [categoryTotal, bucketTotal, bucketBudget] = await Promise.all([
+          prisma.transaction.aggregate({
+            where: { categoryId: category.id, type: 'EXPENSE' },
+            _sum: { amount: true }
+          }),
+          prisma.transaction.aggregate({
+            where: { bucket: structuredCommand.bucket || 'NEED', type: 'EXPENSE' },
+            _sum: { amount: true }
+          }),
+          prisma.category.aggregate({
+            where: { },
+            _sum: { budget: true }
+          })
+        ]);
+        const catSpent = categoryTotal._sum.amount || 0;
+        const catBudget = category.budget || 0;
+        const bucketSpent = bucketTotal._sum.amount || 0;
+        // For bucket budget, sum all categories in this bucket
+        const bucketCategories = await prisma.category.findMany({
+          where: {},
+        });
+        const bucketCatIds = bucketCategories
+          .filter(cat => cat.name && cat.name.toLowerCase().includes((structuredCommand.bucket || 'NEED').toLowerCase()))
+          .map(cat => cat.id);
+        const bucketCatBudgets = bucketCategories
+          .filter(cat => cat.name && cat.name.toLowerCase().includes((structuredCommand.bucket || 'NEED').toLowerCase()))
+          .reduce((sum, cat) => sum + (cat.budget || 0), 0);
+        // Feedback message
+        let feedback = '';
+        if (catBudget > 0) {
+          feedback += `\nCategory '${category.name}': Spent $${catSpent.toFixed(2)} / Budget $${catBudget.toFixed(2)}.`;
+          if (catSpent > catBudget) {
+            feedback += ` Over budget by $${(catSpent - catBudget).toFixed(2)}!`;
+          } else {
+            feedback += ` $${(catBudget - catSpent).toFixed(2)} left in your category budget.`;
+          }
+        }
+        if (bucketCatBudgets > 0) {
+          feedback += `\nBucket '${structuredCommand.bucket || 'NEED'}': Spent $${bucketSpent.toFixed(2)} / Budget $${bucketCatBudgets.toFixed(2)}.`;
+          if (bucketSpent > bucketCatBudgets) {
+            feedback += ` Over budget by $${(bucketSpent - bucketCatBudgets).toFixed(2)}!`;
+          } else {
+            feedback += ` $${(bucketCatBudgets - bucketSpent).toFixed(2)} left in your bucket budget.`;
+          }
+        }
+        message = `Transaction for ${structuredCommand.description || structuredCommand.category} added to ${structuredCommand.category} category!${feedback}`;
       } else if (structuredCommand.function === 'get_spending') {
         message = 'Spending summary feature coming soon!';
         result = {};
