@@ -3,7 +3,6 @@ import formidable from 'formidable';
 import fs from 'fs';
 import { PrismaClient } from '@prisma/client';
 import axios from 'axios';
-import { lookupPrice, analyzeSpendingPattern } from '@/lib/priceLookup';
 import FormData from 'form-data';
 
 const prisma = new PrismaClient();
