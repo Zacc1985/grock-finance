@@ -116,6 +116,13 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800 text-white p-6">
+      <div className="flex justify-end mb-4">
+        <a href="/fifty-thirty-twenty">
+          <button className="bg-grock-500 text-white px-4 py-2 rounded-lg hover:bg-grock-600 transition-colors">
+            50/30/20 Rule Overview
+          </button>
+        </a>
+      </div>
       <h1 className="text-4xl font-bold mb-8">Financial Dashboard</h1>
       
       {/* Voice Command Interface */}
