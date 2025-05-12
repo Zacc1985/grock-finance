@@ -16,13 +16,12 @@ export async function GET(req: Request) {
       });
 
       if (!config) {
-        return NextResponse.json(
-          { error: 'Configuration not found' },
-          { status: 404 }
-        );
+        // Return a value property as empty string if not found
+        return NextResponse.json({ value: '' });
       }
 
-      return NextResponse.json(config);
+      // Always return { value } for the frontend
+      return NextResponse.json({ value: config.value });
     }
 
     // Get all configs

@@ -14,9 +14,12 @@ export default function IncomeConfig({ onIncomeChange }: { onIncomeChange?: () =
         const response = await fetch('/api/config?key=monthly_income');
         if (response.ok) {
           const data = await response.json();
-          setMonthlyIncome(data.value);
+          setMonthlyIncome(data.value || '');
+        } else {
+          setMonthlyIncome(''); // fallback if not found
         }
       } catch (err) {
+        setMonthlyIncome('');
         console.error('Error fetching monthly income:', err);
       }
     };
