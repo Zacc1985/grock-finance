@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 
 interface UseVoiceCommandProps {
-  onSuccess?: () => void;
+  onSuccess?: (intent?: string, parameters?: any) => void;
   onError?: (error: string) => void;
 }
 
@@ -55,7 +55,7 @@ export function useVoiceCommand({ onSuccess, onError }: UseVoiceCommandProps = {
       }
 
       setVoiceMessage('');
-      onSuccess?.();
+      onSuccess?.(intent, parameters);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'An error occurred';
       setError(errorMessage);

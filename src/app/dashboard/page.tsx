@@ -54,6 +54,9 @@ export default function Dashboard() {
   const [error, setError] = useState('');
   const [aiInsight, setAiInsight] = useState('');
   const [aiLoading, setAiLoading] = useState(true);
+  // Track the last action for undo
+  const [lastAction, setLastAction] = useState<{ intent: string; parameters: any } | null>(null);
+  const [undoing, setUndoing] = useState(false);
 
   const { 
     voiceMessage, 
@@ -61,7 +64,10 @@ export default function Dashboard() {
     handleVoiceCommand,
     error: voiceError 
   } = useVoiceCommand({
-    onSuccess: () => window.location.reload(),
+    onSuccess: (intent?: string, parameters?: any) => {
+      if (intent && parameters) setLastAction({ intent, parameters });
+      window.location.reload();
+    },
     onError: (err) => setError(err)
   });
 
@@ -184,6 +190,37 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800 text-white p-6">
       <div className="flex justify-end mb-4">
+        {/* Undo Button */}
+        {lastAction && (
+          <button
+            className="bg-yellow-500 text-white px-4 py-2 rounded-lg hover:bg-yellow-600 transition-colors mr-2"
+            onClick={async () => {
+              setUndoing(true);
+              setError('');
+              try {
+                // Placeholder: send undo request to backend (implement /api/undo as needed)
+                const res = await fetch('/api/undo', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(lastAction)
+                });
+                if (!res.ok) {
+                  const data = await res.json();
+                  throw new Error(data.error || 'Failed to undo last action');
+                }
+                setLastAction(null);
+                refreshDashboard();
+              } catch (err) {
+                setError(err instanceof Error ? err.message : 'Failed to undo');
+              } finally {
+                setUndoing(false);
+              }
+            }}
+            disabled={undoing}
+          >
+            {undoing ? 'Undoing...' : 'Undo Last Action'}
+          </button>
+        )}
         <a href="/fifty-thirty-twenty">
           <button className="bg-grock-500 text-white px-4 py-2 rounded-lg hover:bg-grock-600 transition-colors">
             50/30/20 Rule Overview
