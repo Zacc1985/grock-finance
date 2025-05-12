@@ -1,5 +1,4 @@
 import { useState, useCallback } from 'react';
-import { validateVoiceCommand, extractAmount, extractCategory } from '../utils/voiceCommandValidation';
 
 interface UseVoiceCommandProps {
   onSuccess?: () => void;
@@ -22,109 +21,27 @@ export function useVoiceCommand({ onSuccess, onError }: UseVoiceCommandProps = {
     setError(null);
 
     try {
-      // First, try to determine the intent from the message
-      const lowerMessage = voiceMessage.toLowerCase();
-      let intent = '';
-      let parameters: Record<string, any> = {};
+      // Send the message to the smart AI intent endpoint
+      const aiRes = await fetch('/api/ai/intent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: voiceMessage })
+      });
+      if (!aiRes.ok) {
+        const data = await aiRes.json();
+        throw new Error(data.error || 'Failed to process command');
+      }
+      const { intent, parameters } = await aiRes.json();
 
-      // Determine intent based on keywords
-      if (
-        lowerMessage.includes('reset') ||
-        lowerMessage.includes('clear all') ||
-        lowerMessage.includes('start over') ||
-        lowerMessage.includes('reset all categories') ||
-        lowerMessage.includes('reset my budget')
-      ) {
-        intent = 'RESET_BUDGET';
-      } else if (lowerMessage.includes('spent') || lowerMessage.includes('spend') || lowerMessage.includes('bought')) {
-        intent = 'ADD_EXPENSE';
-        const { amount, error: amountError } = extractAmount(voiceMessage);
-        if (amountError) {
-          throw new Error(amountError);
-        }
-        parameters.amount = amount;
-
-        // Extract category from the message
-        const { category, error: categoryError } = extractCategory(voiceMessage, [
-          'groceries', 'food', 'dining', 'transportation', 'entertainment',
-          'shopping', 'bills', 'utilities', 'rent', 'mortgage', 'health',
-          'education', 'gifts', 'savings', 'investment'
-        ]);
-        if (categoryError) {
-          throw new Error(categoryError);
-        }
-        parameters.category = category;
-
-        // Extract description if present
-        const descriptionMatch = voiceMessage.match(/on\s+(.+?)(?:\s+in\s+|\s+for\s+|\s*$)/i);
-        if (descriptionMatch) {
-          parameters.description = descriptionMatch[1].trim();
-        }
-      } else if (lowerMessage.includes('balance') || lowerMessage.includes('spent') || lowerMessage.includes('spending')) {
-        intent = 'CHECK_BALANCE';
-        const { category, error: categoryError } = extractCategory(voiceMessage, [
-          'groceries', 'food', 'dining', 'transportation', 'entertainment',
-          'shopping', 'bills', 'utilities', 'rent', 'mortgage', 'health',
-          'education', 'gifts', 'savings', 'investment'
-        ]);
-        if (categoryError) {
-          throw new Error(categoryError);
-        }
-        parameters.category = category;
-
-        // Extract period if present
-        const periodMatch = lowerMessage.match(/(today|this week|this month|this year)/);
-        if (periodMatch) {
-          parameters.period = periodMatch[1].replace('this ', '');
-        }
-      } else if (lowerMessage.includes('goal') || lowerMessage.includes('save for')) {
-        intent = 'SET_GOAL';
-        const { amount, error: amountError } = extractAmount(voiceMessage);
-        if (amountError) {
-          throw new Error(amountError);
-        }
-        parameters.amount = amount;
-
-        // Extract goal name
-        const nameMatch = voiceMessage.match(/save for\s+(.+?)(?:\s+by\s+|\s*$)/i) ||
-                         voiceMessage.match(/goal to\s+(.+?)(?:\s+by\s+|\s*$)/i);
-        if (nameMatch) {
-          parameters.name = nameMatch[1].trim();
-        } else {
-          throw new Error('Please specify what you want to save for');
-        }
-
-        // Extract deadline if present
-        const deadlineMatch = voiceMessage.match(/by\s+(.+?)$/i);
-        if (deadlineMatch) {
-          parameters.deadline = deadlineMatch[1].trim();
-        }
-      } else {
-        throw new Error('I couldn\'t understand what you want to do. Try saying something like "I spent $50 on groceries" or "What\'s my balance in entertainment this month?"');
+      if (!intent || intent === 'UNKNOWN') {
+        throw new Error("Sorry, I couldn't understand your command. Try rephrasing or using a different request.");
       }
 
-      // Validate the command using our validation system
-      const { isValid, errors } = validateVoiceCommand(
-        voiceMessage,
-        intent,
-        parameters,
-        [
-          'groceries', 'food', 'dining', 'transportation', 'entertainment',
-          'shopping', 'bills', 'utilities', 'rent', 'mortgage', 'health',
-          'education', 'gifts', 'savings', 'investment'
-        ]
-      );
-
-      if (!isValid) {
-        throw new Error(errors.join('\n'));
-      }
-
-      // Process the command based on intent
+      // Now handle the intent (you can expand this as you add more intents)
+      // For now, just send to a generic /api/voice-command endpoint for further processing
       const response = await fetch('/api/voice-command', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           rawText: voiceMessage,
           intent,
