@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { CurrencyDollarIcon } from '@heroicons/react/24/outline';
 
-export default function IncomeConfig() {
+export default function IncomeConfig({ onIncomeChange }: { onIncomeChange?: () => void }) {
   const [monthlyIncome, setMonthlyIncome] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -49,6 +49,7 @@ export default function IncomeConfig() {
       }
 
       setSuccess(true);
+      if (onIncomeChange) onIncomeChange();
       // Hide success message after 3 seconds
       setTimeout(() => setSuccess(false), 3000);
     } catch (err) {

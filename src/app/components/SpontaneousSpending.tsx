@@ -8,9 +8,10 @@ interface Category {
 
 interface SpontaneousSpendingProps {
   categories: Category[];
+  onDataChange?: () => void;
 }
 
-export default function SpontaneousSpending({ categories }: SpontaneousSpendingProps) {
+export default function SpontaneousSpending({ categories, onDataChange }: SpontaneousSpendingProps) {
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
   const [categoryId, setCategoryId] = useState('');
@@ -48,6 +49,7 @@ export default function SpontaneousSpending({ categories }: SpontaneousSpendingP
       setAmount('');
       setDescription('');
       setCategoryId('');
+      if (onDataChange) onDataChange();
     } catch (err) {
       setError('Failed to process your spontaneous spending. Please try again.');
       console.error(err);

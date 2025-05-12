@@ -45,7 +45,7 @@ interface CoachingMessage {
   severity: 'success' | 'warning' | 'danger';
 }
 
-export default function BudgetCoach() {
+export default function BudgetCoach({ onDataChange }: { onDataChange?: () => void }) {
   const [analysis, setAnalysis] = useState<BudgetAnalysis | null>(null);
   const [coachingMessage, setCoachingMessage] = useState<CoachingMessage | null>(null);
   const [loading, setLoading] = useState(true);
@@ -133,6 +133,7 @@ export default function BudgetCoach() {
       setAnalysis(data);
       setLocalAnalysis(data);
       setCoachingMessage(generateCoachingMessage(data));
+      if (onDataChange) onDataChange();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred while resetting');
     } finally {

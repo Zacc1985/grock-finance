@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { 
   ChartBarIcon, 
   CurrencyDollarIcon, 
@@ -52,6 +52,8 @@ export default function Dashboard() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [aiInsight, setAiInsight] = useState('');
+  const [aiLoading, setAiLoading] = useState(true);
 
   const { 
     voiceMessage, 
@@ -63,36 +65,55 @@ export default function Dashboard() {
     onError: (err) => setError(err)
   });
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [transactionsRes, goalsRes, categoriesRes] = await Promise.all([
-          fetch('/api/transactions'),
-          fetch('/api/goals'),
-          fetch('/api/categories')
-        ]);
-
-        if (!transactionsRes.ok || !goalsRes.ok || !categoriesRes.ok) {
-          throw new Error('Failed to fetch data');
-        }
-
-        const transactionsData = await transactionsRes.json();
-        const goalsData = await goalsRes.json();
-        const categoriesData = await categoriesRes.json();
-
-        setTransactions(transactionsData);
-        setGoals(goalsData);
-        setCategories(categoriesData);
-      } catch (err) {
-        setError('Failed to load dashboard data');
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
+  const fetchAiInsight = useCallback(async () => {
+    setAiLoading(true);
+    try {
+      const res = await fetch('/api/ai/insights');
+      const data = await res.json();
+      setAiInsight(data.insight || 'No insight available.');
+    } catch (e) {
+      setAiInsight('Could not load AI insight.');
+    }
+    setAiLoading(false);
   }, []);
+
+  const refreshDashboard = async () => {
+    setLoading(true);
+    try {
+      const [transactionsRes, goalsRes, categoriesRes] = await Promise.all([
+        fetch('/api/transactions'),
+        fetch('/api/goals'),
+        fetch('/api/categories')
+      ]);
+
+      if (!transactionsRes.ok || !goalsRes.ok || !categoriesRes.ok) {
+        throw new Error('Failed to fetch data');
+      }
+
+      const transactionsData = await transactionsRes.json();
+      const goalsData = await goalsRes.json();
+      const categoriesData = await categoriesRes.json();
+
+      setTransactions(transactionsData);
+      setGoals(goalsData);
+      setCategories(categoriesData);
+      await fetchAiInsight();
+    } catch (err) {
+      setError('Failed to load dashboard data');
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    refreshDashboard();
+  }, [fetchAiInsight]);
+
+  // Handler to pass to children for triggering refresh
+  const handleDataChange = () => {
+    refreshDashboard();
+  };
 
   if (loading) {
     return (
@@ -247,17 +268,23 @@ export default function Dashboard() {
 
       {/* Add IncomeConfig at the top */}
       <div className="lg:col-span-3">
-        <IncomeConfig />
+        <IncomeConfig onIncomeChange={handleDataChange} />
       </div>
 
       {/* Add BudgetCoach component before SpontaneousSpending */}
       <div className="lg:col-span-2 mb-6">
-        <BudgetCoach />
+        <BudgetCoach onDataChange={handleDataChange} />
       </div>
 
       {/* SpontaneousSpending component */}
       <div className="lg:col-span-1">
-        <SpontaneousSpending categories={categories} />
+        <SpontaneousSpending categories={categories} onDataChange={handleDataChange} />
+      </div>
+
+      {/* AI Financial Insight Box */}
+      <div className="bg-gray-700 rounded-lg p-4 text-grock-100 text-sm mt-8">
+        <div className="font-semibold text-grock-200 mb-1">AI Financial Insight:</div>
+        {aiLoading ? 'Loading insight...' : aiInsight}
       </div>
     </div>
   );
