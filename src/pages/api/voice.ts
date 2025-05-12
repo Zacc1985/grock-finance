@@ -42,130 +42,68 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
 
     if (!whisperResponse.ok) {
+      const errorText = await whisperResponse.text();
+      console.error('Whisper API error:', errorText);
       throw new Error('Failed to transcribe audio');
     }
 
     const { text } = await whisperResponse.json();
 
-    // Process the transcribed text with OpenAI
-    const chatResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+    // Send the transcribed text to the AI intent endpoint
+    const aiIntentResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/ai/intent`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: 'gpt-3.5-turbo',
-        messages: [
-          {
-            role: 'system',
-            content: 'You are a budgeting assistant. Your job is to understand casual spending inputs and turn them into structured commands for an API. For example: "I bought a #7 from McDonald\'s today" → { "function": "add_expense", "amount": 7.50, "category": "food", "date": "2023-10-17" }. If details are missing, ask for clarification. Respond in a fun, conversational tone.'
-          },
-          {
-            role: 'user',
-            content: text
-          }
-        ],
-        functions: [
-          {
-            name: 'add_expense',
-            description: 'Add a new expense to the budget',
-            parameters: {
-              type: 'object',
-              properties: {
-                amount: {
-                  type: 'number',
-                  description: 'The amount of the expense'
-                },
-                category: {
-                  type: 'string',
-                  description: 'The category of the expense'
-                },
-                description: {
-                  type: 'string',
-                  description: 'A description of the expense'
-                },
-                date: {
-                  type: 'string',
-                  description: 'The date of the expense in YYYY-MM-DD format'
-                }
-              },
-              required: ['amount', 'category']
-            }
-          }
-        ],
-        function_call: 'auto'
-      }),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: text }),
     });
 
-    if (!chatResponse.ok) {
-      throw new Error('Failed to process text with OpenAI');
+    if (!aiIntentResponse.ok) {
+      const errorText = await aiIntentResponse.text();
+      console.error('AI Intent API error:', errorText);
+      throw new Error('Failed to process intent from AI');
     }
 
-    const chatData = await chatResponse.json();
-    const message = chatData.choices[0].message;
+    const { intent, parameters } = await aiIntentResponse.json();
 
     // Log the voice command
     await prisma.voiceCommand.create({
       data: {
         rawText: text,
-        intent: message.function_call?.name || 'unknown',
-        parameters: JSON.stringify(message.function_call?.arguments || {}),
-        success: true,
-        processingTime: 0, // You might want to calculate this
+        intent: intent || 'unknown',
+        parameters: JSON.stringify(parameters || {}),
+        success: !!intent && intent !== 'unknown',
+        processingTime: 0,
       },
     });
 
-    // If there's a function call, process it
-    if (message.function_call) {
-      const { name, arguments: args } = message.function_call;
-      const parsedArgs = JSON.parse(args);
-
-      if (name === 'add_expense') {
-        // Find or create the category
-        let category = await prisma.category.findFirst({
-          where: { name: parsedArgs.category }
-        });
-
-        if (!category) {
-          category = await prisma.category.create({
-            data: {
-              name: parsedArgs.category,
-              budget: 0, // You might want to set a default budget
-            },
-          });
-        }
-
-        // Create the transaction
-        const transaction = await prisma.transaction.create({
-          data: {
-            amount: parsedArgs.amount,
-            description: parsedArgs.description || 'Voice command expense',
-            categoryId: category.id,
-            type: 'expense',
-            tags: JSON.stringify([]),
-            bucket: 'needs', // You might want to determine this based on the category
-            date: parsedArgs.date ? new Date(parsedArgs.date) : new Date(),
-          },
-        });
-
-        return res.status(200).json({
-          text,
-          message: `Added expense of $${parsedArgs.amount} to ${parsedArgs.category}`,
-          result: {
-            transaction,
-            category,
-            bucket: 'needs'
-          }
-        });
+    // Example: handle add_expense intent (expand as needed)
+    if (intent === 'add_expense' && parameters) {
+      let category = await prisma.category.findFirst({ where: { name: parameters.category } });
+      if (!category) {
+        category = await prisma.category.create({ data: { name: parameters.category, budget: 0 } });
       }
+      const transaction = await prisma.transaction.create({
+        data: {
+          amount: parameters.amount,
+          description: parameters.description || 'Voice command expense',
+          categoryId: category.id,
+          type: 'expense',
+          tags: JSON.stringify([]),
+          bucket: 'needs',
+          date: parameters.date ? new Date(parameters.date) : new Date(),
+        },
+      });
+      return res.status(200).json({
+        text,
+        message: `Added expense of $${parameters.amount} to ${parameters.category}`,
+        result: { transaction, category, bucket: 'needs' },
+      });
     }
 
-    // If no function call or not handled, return the assistant's message
+    // If no intent or not handled, return the AI's message
     return res.status(200).json({
       text,
-      message: message.content,
-      result: null
+      message: `AI intent: ${intent}`,
+      result: null,
     });
 
   } catch (error) {
