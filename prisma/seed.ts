@@ -26,6 +26,13 @@ async function main() {
         budget: 2000,
       },
     }),
+    prisma.category.create({
+      data: {
+        name: 'Gifts',
+        type: 'EXPENSE',
+        budget: 200,  // Monthly gift budget
+      },
+    }),
   ]);
 
   // Create a recurring expense

@@ -8,6 +8,10 @@ import {
   ArrowTrendingUpIcon,
   MicrophoneIcon
 } from '@heroicons/react/24/outline';
+import SpontaneousSpending from '../components/SpontaneousSpending';
+import BudgetCoach from '../components/BudgetCoach';
+import { useVoiceCommand } from '../hooks/useVoiceCommand';
+import IncomeConfig from '../components/IncomeConfig';
 
 interface Transaction {
   id: string;
@@ -37,31 +41,48 @@ interface Goal {
   };
 }
 
+interface Category {
+  id: string;
+  name: string;
+}
+
 export default function Dashboard() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [isListening, setIsListening] = useState(false);
-  const [voiceMessage, setVoiceMessage] = useState('');
+
+  const { 
+    voiceMessage, 
+    setVoiceMessage, 
+    handleVoiceCommand,
+    error: voiceError 
+  } = useVoiceCommand({
+    onSuccess: () => window.location.reload(),
+    onError: (err) => setError(err)
+  });
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [transactionsRes, goalsRes] = await Promise.all([
+        const [transactionsRes, goalsRes, categoriesRes] = await Promise.all([
           fetch('/api/transactions'),
-          fetch('/api/goals')
+          fetch('/api/goals'),
+          fetch('/api/categories')
         ]);
 
-        if (!transactionsRes.ok || !goalsRes.ok) {
+        if (!transactionsRes.ok || !goalsRes.ok || !categoriesRes.ok) {
           throw new Error('Failed to fetch data');
         }
 
         const transactionsData = await transactionsRes.json();
         const goalsData = await goalsRes.json();
+        const categoriesData = await categoriesRes.json();
 
         setTransactions(transactionsData);
         setGoals(goalsData);
+        setCategories(categoriesData);
       } catch (err) {
         setError('Failed to load dashboard data');
         console.error(err);
@@ -72,31 +93,6 @@ export default function Dashboard() {
 
     fetchData();
   }, []);
-
-  const handleVoiceCommand = async () => {
-    if (!voiceMessage.trim()) return;
-
-    try {
-      const response = await fetch('/api/voice', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ voiceText: voiceMessage })
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to process voice command');
-      }
-
-      const data = await response.json();
-      // Refresh data after successful command
-      window.location.reload();
-    } catch (err) {
-      setError('Failed to process voice command');
-      console.error(err);
-    }
-  };
 
   if (loading) {
     return (
@@ -149,6 +145,9 @@ export default function Dashboard() {
         <p className="text-sm text-gray-400 mt-2">
           Try saying things like "I spent $50 on groceries" or "How much did I spend on food this month?"
         </p>
+        {voiceError && (
+          <p className="text-red-400 text-sm mt-2">{voiceError}</p>
+        )}
       </div>
 
       {/* Grok's AI Insights Section */}
@@ -244,6 +243,21 @@ export default function Dashboard() {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* Add IncomeConfig at the top */}
+      <div className="lg:col-span-3">
+        <IncomeConfig />
+      </div>
+
+      {/* Add BudgetCoach component before SpontaneousSpending */}
+      <div className="lg:col-span-2 mb-6">
+        <BudgetCoach />
+      </div>
+
+      {/* SpontaneousSpending component */}
+      <div className="lg:col-span-1">
+        <SpontaneousSpending categories={categories} />
       </div>
     </div>
   );
