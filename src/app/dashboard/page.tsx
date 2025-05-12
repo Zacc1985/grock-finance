@@ -94,7 +94,15 @@ export default function Dashboard() {
       const goalsData = await goalsRes.json();
       const categoriesData = await categoriesRes.json();
 
-      setTransactions(transactionsData);
+      // Add validation for transactions data
+      const validTransactions = Array.isArray(transactionsData) ? transactionsData.filter(tx => 
+        tx && typeof tx === 'object' && 
+        'id' in tx && 
+        'description' in tx && 
+        'date' in tx
+      ) : [];
+
+      setTransactions(validTransactions);
       setGoals(goalsData);
       setCategories(categoriesData);
       await fetchAiInsight();
@@ -181,9 +189,9 @@ export default function Dashboard() {
           <div className="space-y-4">
             {transactions.slice(0, 3).map(tx => (
               <div key={tx.id} className="border-l-4 border-grock-500 pl-4">
-                <p className="text-sm text-gray-400">{new Date(tx.date).toLocaleDateString()}</p>
-                <p className="font-medium">{tx.description}</p>
-                <p className="text-sm text-grock-300">{tx.aiAnalysis?.sentiment ?? "No analysis"}</p>
+                <p className="text-sm text-gray-400">{tx?.date ? new Date(tx.date).toLocaleDateString() : 'No date'}</p>
+                <p className="font-medium">{tx?.description || 'No description'}</p>
+                <p className="text-sm text-grock-300">{tx?.aiAnalysis?.sentiment ?? "No analysis"}</p>
               </div>
             ))}
           </div>
@@ -198,8 +206,9 @@ export default function Dashboard() {
           <div className="space-y-3">
             {Object.entries(
               transactions.reduce((acc, tx) => {
-                if (tx.type === 'EXPENSE') {
-                  acc[tx.category.name] = (acc[tx.category.name] || 0) + tx.amount;
+                if (tx?.type === 'EXPENSE' && tx?.category?.name) {
+                  const amount = typeof tx.amount === 'number' ? tx.amount : 0;
+                  acc[tx.category.name] = (acc[tx.category.name] || 0) + amount;
                 }
                 return acc;
               }, {} as Record<string, number>)
@@ -220,22 +229,22 @@ export default function Dashboard() {
           </div>
           <div className="space-y-4">
             {goals.map(goal => (
-              <div key={goal.id} className="space-y-2">
+              <div key={goal?.id || Math.random()} className="space-y-2">
                 <div className="flex justify-between items-center">
-                  <span>{goal.name}</span>
+                  <span>{goal?.name || 'Unnamed Goal'}</span>
                   <span className="text-sm text-grock-300">
-                    ${goal.currentAmount} / ${goal.targetAmount}
+                    ${goal?.currentAmount || 0} / ${goal?.targetAmount || 0}
                   </span>
                 </div>
                 <div className="w-full bg-gray-700 rounded-full h-2.5">
                   <div
                     className="bg-grock-500 h-2.5 rounded-full"
                     style={{
-                      width: `${(goal.currentAmount / goal.targetAmount) * 100}%`
+                      width: `${((goal?.currentAmount || 0) / (goal?.targetAmount || 1)) * 100}%`
                     }}
                   ></div>
                 </div>
-                <p className="text-sm text-grock-300">{goal.aiSuggestions.strategy}</p>
+                <p className="text-sm text-grock-300">{goal?.aiSuggestions?.strategy || 'No strategy available'}</p>
               </div>
             ))}
           </div>
@@ -250,16 +259,16 @@ export default function Dashboard() {
         </div>
         <div className="space-y-4">
           {transactions.slice(0, 5).map(tx => (
-            <div key={tx.id} className="flex items-center justify-between p-4 bg-gray-700 rounded-lg">
+            <div key={tx?.id || Math.random()} className="flex items-center justify-between p-4 bg-gray-700 rounded-lg">
               <div>
-                <p className="font-medium">{tx.description}</p>
-                <p className="text-sm text-gray-400">{new Date(tx.date).toLocaleDateString()}</p>
+                <p className="font-medium">{tx?.description || 'Unknown Transaction'}</p>
+                <p className="text-sm text-gray-400">{tx?.date ? new Date(tx.date).toLocaleDateString() : 'No date'}</p>
               </div>
               <div className="text-right">
-                <p className={`font-mono ${tx.type === 'EXPENSE' ? 'text-red-400' : 'text-green-400'}`}>
-                  {tx.type === 'EXPENSE' ? '-' : '+'}${tx.amount.toFixed(2)}
+                <p className={`font-mono ${tx?.type === 'EXPENSE' ? 'text-red-400' : 'text-green-400'}`}>
+                  {tx?.type === 'EXPENSE' ? '-' : '+'}${(tx?.amount || 0).toFixed(2)}
                 </p>
-                <p className="text-sm text-gray-400">{tx.category.name}</p>
+                <p className="text-sm text-gray-400">{tx?.category?.name || 'Uncategorized'}</p>
               </div>
             </div>
           ))}
