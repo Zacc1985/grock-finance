@@ -18,13 +18,17 @@ export default function BudgetTotalPopup({
   onReset,
   type
 }: BudgetTotalPopupProps) {
+  // Ensure currentAmount and targetAmount are always numbers
+  const safeCurrentAmount = typeof currentAmount === 'number' && !isNaN(currentAmount) ? currentAmount : 0;
+  const safeTargetAmount = typeof targetAmount === 'number' && !isNaN(targetAmount) ? targetAmount : 0;
+
   const [isOpen, setIsOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  const [editValue, setEditValue] = useState(currentAmount.toString());
+  const [editValue, setEditValue] = useState(safeCurrentAmount.toString());
 
   const handleEdit = () => {
     setIsEditing(true);
-    setEditValue(currentAmount.toString());
+    setEditValue(safeCurrentAmount.toString());
   };
 
   const handleSave = () => {
@@ -60,7 +64,7 @@ export default function BudgetTotalPopup({
       >
         <span className={`font-medium ${getTypeColor()}`}>{label}</span>
         <span className="text-gray-900">
-          ${currentAmount.toFixed(2)} / ${targetAmount.toFixed(2)}
+          ${safeCurrentAmount.toFixed(2)} / ${safeTargetAmount.toFixed(2)}
         </span>
       </button>
 
