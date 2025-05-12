@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "type-check": "tsc --noEmit",
+    "push": "git add . && git commit -m \"Auto update\" && git push"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"

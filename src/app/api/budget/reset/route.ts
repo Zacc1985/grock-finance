@@ -6,8 +6,7 @@ export async function POST() {
     // Reset all transactions to 0
     await prisma.transaction.updateMany({
       data: {
-        amount: 0,
-        aiAnalysis: null
+        amount: 0
       }
     });
 
