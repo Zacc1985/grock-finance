@@ -14,8 +14,7 @@ export async function POST() {
     await prisma.goal.updateMany({
       data: {
         currentAmount: 0,
-        status: 'IN_PROGRESS',
-        aiSuggestions: null
+        status: 'IN_PROGRESS'
       }
     });
 
