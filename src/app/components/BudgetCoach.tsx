@@ -4,7 +4,8 @@ import {
   LightBulbIcon,
   ArrowTrendingUpIcon,
   SparklesIcon,
-  CheckCircleIcon
+  CheckCircleIcon,
+  ArrowPathIcon
 } from '@heroicons/react/24/outline';
 import { generateCoachingMessage } from '../utils/budgetCoaching';
 import BudgetTotalPopup from './BudgetTotalPopup';
@@ -50,6 +51,7 @@ export default function BudgetCoach() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [localAnalysis, setLocalAnalysis] = useState<BudgetAnalysis | null>(null);
+  const [isResetting, setIsResetting] = useState(false);
 
   useEffect(() => {
     const fetchBudgetAnalysis = async () => {
@@ -105,6 +107,37 @@ export default function BudgetCoach() {
         savingsSpent: type === 'savings' ? analysis.savingsSpent : prev.savingsSpent,
       };
     });
+  };
+
+  const handleResetAll = async () => {
+    if (!confirm('Are you sure you want to reset all budget categories? This will clear all transactions and reset goals to their initial state.')) {
+      return;
+    }
+
+    setIsResetting(true);
+    try {
+      const response = await fetch('/api/budget/reset', {
+        method: 'POST',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to reset budget categories');
+      }
+
+      // Refresh the analysis after reset
+      const analysisResponse = await fetch('/api/budget/impact');
+      if (!analysisResponse.ok) {
+        throw new Error('Failed to fetch updated budget analysis');
+      }
+      const data = await analysisResponse.json();
+      setAnalysis(data);
+      setLocalAnalysis(data);
+      setCoachingMessage(generateCoachingMessage(data));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred while resetting');
+    } finally {
+      setIsResetting(false);
+    }
   };
 
   if (loading) {
@@ -163,6 +196,22 @@ export default function BudgetCoach() {
 
   return (
     <div className="bg-white rounded-lg shadow p-6">
+      {/* Reset Button */}
+      <div className="flex justify-end mb-4">
+        <button
+          onClick={handleResetAll}
+          disabled={isResetting}
+          className={`inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white 
+            ${isResetting 
+              ? 'bg-gray-400 cursor-not-allowed' 
+              : 'bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500'
+            }`}
+        >
+          <ArrowPathIcon className={`h-4 w-4 mr-2 ${isResetting ? 'animate-spin' : ''}`} />
+          {isResetting ? 'Resetting...' : 'Reset All Categories'}
+        </button>
+      </div>
+
       <div className={`rounded-lg p-4 mb-6 ${getSeverityColor(coachingMessage.severity)}`}>
         <div className="flex items-center">
           <div className="flex-shrink-0">
