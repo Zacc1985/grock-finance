@@ -8,7 +8,6 @@ import {
   ArrowTrendingUpIcon,
   MicrophoneIcon
 } from '@heroicons/react/24/outline';
-import SpontaneousSpending from '../components/SpontaneousSpending';
 import BudgetCoach from '../components/BudgetCoach';
 import { useVoiceCommand } from '../hooks/useVoiceCommand';
 import IncomeConfig from '../components/IncomeConfig';
@@ -367,11 +366,6 @@ export default function Dashboard() {
       {/* Add BudgetCoach component before SpontaneousSpending */}
       <div className="lg:col-span-2 mb-6">
         <BudgetCoach onDataChange={handleDataChange} />
-      </div>
-
-      {/* SpontaneousSpending component */}
-      <div className="lg:col-span-1">
-        <SpontaneousSpending categories={categories} onDataChange={handleDataChange} />
       </div>
 
       {/* AI Financial Insight Box */}
