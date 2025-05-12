@@ -104,6 +104,21 @@ export default function VoicePage() {
             <li>• "What's my current budget status?"</li>
           </ul>
         </div>
+        {/* Physical Reset Button */}
+        <button
+          onClick={async () => {
+            const res = await fetch('/api/budget/reset', { method: 'POST' });
+            if (res.ok) {
+              alert('Budget reset successfully!');
+              fetchCommands();
+            } else {
+              alert('Failed to reset budget.');
+            }
+          }}
+          className="mt-6 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
+        >
+          Reset All Categories
+        </button>
       </div>
 
       {/* Command History */}

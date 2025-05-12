@@ -28,7 +28,15 @@ export function useVoiceCommand({ onSuccess, onError }: UseVoiceCommandProps = {
       let parameters: Record<string, any> = {};
 
       // Determine intent based on keywords
-      if (lowerMessage.includes('spent') || lowerMessage.includes('spend') || lowerMessage.includes('bought')) {
+      if (
+        lowerMessage.includes('reset') ||
+        lowerMessage.includes('clear all') ||
+        lowerMessage.includes('start over') ||
+        lowerMessage.includes('reset all categories') ||
+        lowerMessage.includes('reset my budget')
+      ) {
+        intent = 'RESET_BUDGET';
+      } else if (lowerMessage.includes('spent') || lowerMessage.includes('spend') || lowerMessage.includes('bought')) {
         intent = 'ADD_EXPENSE';
         const { amount, error: amountError } = extractAmount(voiceMessage);
         if (amountError) {

@@ -18,7 +18,15 @@ interface SetGoalConfig extends BaseIntentConfig {
   validateDeadline: (deadline: string) => string | null;
 }
 
-type IntentConfig = AddExpenseConfig | CheckBalanceConfig | SetGoalConfig;
+type IntentConfig = AddExpenseConfig | CheckBalanceConfig | SetGoalConfig | BaseIntentConfig;
+
+/**
+ * RESET_BUDGET intent uses only the base config, no validation functions needed.
+ */
+const RESET_BUDGET_CONFIG: BaseIntentConfig = {
+  requiredParams: [],
+  optionalParams: []
+};
 
 // Define valid intents and their required parameters
 export const VALID_INTENTS: Record<string, IntentConfig> = {
@@ -71,7 +79,8 @@ export const VALID_INTENTS: Record<string, IntentConfig> = {
       }
       return null;
     }
-  }
+  },
+  RESET_BUDGET: RESET_BUDGET_CONFIG
 };
 
 // Helper function to extract amount from text
