@@ -7,6 +7,7 @@ import {
   CheckCircleIcon
 } from '@heroicons/react/24/outline';
 import { generateCoachingMessage } from '../utils/budgetCoaching';
+import BudgetTotalPopup from './BudgetTotalPopup';
 
 interface Category {
   id: string;
@@ -48,6 +49,7 @@ export default function BudgetCoach() {
   const [coachingMessage, setCoachingMessage] = useState<CoachingMessage | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [localAnalysis, setLocalAnalysis] = useState<BudgetAnalysis | null>(null);
 
   useEffect(() => {
     const fetchBudgetAnalysis = async () => {
@@ -58,6 +60,7 @@ export default function BudgetCoach() {
         }
         const data = await response.json();
         setAnalysis(data);
+        setLocalAnalysis(data);
         setCoachingMessage(generateCoachingMessage(data));
       } catch (err) {
         setError(err instanceof Error ? err.message : 'An error occurred');
@@ -68,6 +71,41 @@ export default function BudgetCoach() {
 
     fetchBudgetAnalysis();
   }, []);
+
+  // Update local analysis and coaching message when amounts change
+  useEffect(() => {
+    if (localAnalysis) {
+      setCoachingMessage(generateCoachingMessage(localAnalysis));
+    }
+  }, [localAnalysis]);
+
+  const handleUpdateAmount = (type: 'needs' | 'wants' | 'savings', newAmount: number) => {
+    if (!localAnalysis) return;
+
+    setLocalAnalysis(prev => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        needsSpent: type === 'needs' ? newAmount : prev.needsSpent,
+        wantsSpent: type === 'wants' ? newAmount : prev.wantsSpent,
+        savingsSpent: type === 'savings' ? newAmount : prev.savingsSpent,
+      };
+    });
+  };
+
+  const handleResetAmount = (type: 'needs' | 'wants' | 'savings') => {
+    if (!analysis || !localAnalysis) return;
+
+    setLocalAnalysis(prev => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        needsSpent: type === 'needs' ? analysis.needsSpent : prev.needsSpent,
+        wantsSpent: type === 'wants' ? analysis.wantsSpent : prev.wantsSpent,
+        savingsSpent: type === 'savings' ? analysis.savingsSpent : prev.savingsSpent,
+      };
+    });
+  };
 
   if (loading) {
     return (
@@ -98,7 +136,7 @@ export default function BudgetCoach() {
     );
   }
 
-  if (!analysis || !coachingMessage) {
+  if (!localAnalysis || !coachingMessage) {
     return null;
   }
 
@@ -174,23 +212,25 @@ export default function BudgetCoach() {
         <div className="space-y-4">
           {/* Needs */}
           <div>
-            <div className="flex justify-between text-sm mb-1">
-              <span className="text-gray-600">Needs (50%)</span>
-              <span className="text-gray-900">
-                ${analysis.needsSpent.toFixed(2)} / ${(analysis.monthlyIncome * 0.5).toFixed(2)}
-              </span>
-            </div>
-            <div className="w-full bg-gray-200 rounded-full h-2">
+            <BudgetTotalPopup
+              label="Needs (50%)"
+              currentAmount={localAnalysis.needsSpent}
+              targetAmount={localAnalysis.monthlyIncome * 0.5}
+              onUpdate={(amount) => handleUpdateAmount('needs', amount)}
+              onReset={() => handleResetAmount('needs')}
+              type="needs"
+            />
+            <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
               <div
                 className={`h-2 rounded-full ${
-                  analysis.needsSpent > analysis.monthlyIncome * 0.5
+                  localAnalysis.needsSpent > localAnalysis.monthlyIncome * 0.5
                     ? 'bg-red-500'
-                    : analysis.needsSpent > analysis.monthlyIncome * 0.4
+                    : localAnalysis.needsSpent > localAnalysis.monthlyIncome * 0.4
                     ? 'bg-yellow-500'
                     : 'bg-green-500'
                 }`}
                 style={{
-                  width: `${Math.min((analysis.needsSpent / (analysis.monthlyIncome * 0.5)) * 100, 100)}%`
+                  width: `${Math.min((localAnalysis.needsSpent / (localAnalysis.monthlyIncome * 0.5)) * 100, 100)}%`
                 }}
               ></div>
             </div>
@@ -198,23 +238,25 @@ export default function BudgetCoach() {
 
           {/* Wants */}
           <div>
-            <div className="flex justify-between text-sm mb-1">
-              <span className="text-gray-600">Wants (30%)</span>
-              <span className="text-gray-900">
-                ${analysis.wantsSpent.toFixed(2)} / ${(analysis.monthlyIncome * 0.3).toFixed(2)}
-              </span>
-            </div>
-            <div className="w-full bg-gray-200 rounded-full h-2">
+            <BudgetTotalPopup
+              label="Wants (30%)"
+              currentAmount={localAnalysis.wantsSpent}
+              targetAmount={localAnalysis.monthlyIncome * 0.3}
+              onUpdate={(amount) => handleUpdateAmount('wants', amount)}
+              onReset={() => handleResetAmount('wants')}
+              type="wants"
+            />
+            <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
               <div
                 className={`h-2 rounded-full ${
-                  analysis.wantsSpent > analysis.monthlyIncome * 0.3
+                  localAnalysis.wantsSpent > localAnalysis.monthlyIncome * 0.3
                     ? 'bg-red-500'
-                    : analysis.wantsSpent > analysis.monthlyIncome * 0.24
+                    : localAnalysis.wantsSpent > localAnalysis.monthlyIncome * 0.24
                     ? 'bg-yellow-500'
                     : 'bg-green-500'
                 }`}
                 style={{
-                  width: `${Math.min((analysis.wantsSpent / (analysis.monthlyIncome * 0.3)) * 100, 100)}%`
+                  width: `${Math.min((localAnalysis.wantsSpent / (localAnalysis.monthlyIncome * 0.3)) * 100, 100)}%`
                 }}
               ></div>
             </div>
@@ -222,23 +264,25 @@ export default function BudgetCoach() {
 
           {/* Savings */}
           <div>
-            <div className="flex justify-between text-sm mb-1">
-              <span className="text-gray-600">Savings (20%)</span>
-              <span className="text-gray-900">
-                ${analysis.savingsSpent.toFixed(2)} / ${(analysis.monthlyIncome * 0.2).toFixed(2)}
-              </span>
-            </div>
-            <div className="w-full bg-gray-200 rounded-full h-2">
+            <BudgetTotalPopup
+              label="Savings (20%)"
+              currentAmount={localAnalysis.savingsSpent}
+              targetAmount={localAnalysis.monthlyIncome * 0.2}
+              onUpdate={(amount) => handleUpdateAmount('savings', amount)}
+              onReset={() => handleResetAmount('savings')}
+              type="savings"
+            />
+            <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
               <div
                 className={`h-2 rounded-full ${
-                  analysis.savingsSpent < analysis.monthlyIncome * 0.16
+                  localAnalysis.savingsSpent < localAnalysis.monthlyIncome * 0.16
                     ? 'bg-red-500'
-                    : analysis.savingsSpent < analysis.monthlyIncome * 0.18
+                    : localAnalysis.savingsSpent < localAnalysis.monthlyIncome * 0.18
                     ? 'bg-yellow-500'
                     : 'bg-green-500'
                 }`}
                 style={{
-                  width: `${Math.min((analysis.savingsSpent / (analysis.monthlyIncome * 0.2)) * 100, 100)}%`
+                  width: `${Math.min((localAnalysis.savingsSpent / (localAnalysis.monthlyIncome * 0.2)) * 100, 100)}%`
                 }}
               ></div>
             </div>
