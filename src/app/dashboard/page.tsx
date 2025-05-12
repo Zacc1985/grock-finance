@@ -94,17 +94,59 @@ export default function Dashboard() {
       const goalsData = await goalsRes.json();
       const categoriesData = await categoriesRes.json();
 
-      // Add validation for transactions data
-      const validTransactions = Array.isArray(transactionsData) ? transactionsData.filter(tx => 
-        tx && typeof tx === 'object' && 
-        'id' in tx && 
-        'description' in tx && 
-        'date' in tx
-      ) : [];
+      // Validate and transform transactions data
+      const validTransactions = Array.isArray(transactionsData) 
+        ? transactionsData
+          .filter(tx => tx && typeof tx === 'object')
+          .map(tx => ({
+            id: tx.id?.toString() || Math.random().toString(),
+            amount: typeof tx.amount === 'number' ? tx.amount : 0,
+            description: tx.description?.toString() || 'Unknown Transaction',
+            type: tx.type?.toString() || 'EXPENSE',
+            category: {
+              name: tx.category?.name?.toString() || 'Uncategorized'
+            },
+            date: tx.date ? new Date(tx.date).toISOString() : new Date().toISOString(),
+            aiAnalysis: {
+              sentiment: tx.aiAnalysis?.sentiment?.toString() || 'No analysis',
+              confidence: typeof tx.aiAnalysis?.confidence === 'number' ? tx.aiAnalysis.confidence : 0,
+              suggestions: Array.isArray(tx.aiAnalysis?.suggestions) ? tx.aiAnalysis.suggestions : []
+            }
+          }))
+        : [];
+
+      // Validate and transform goals data
+      const validGoals = Array.isArray(goalsData)
+        ? goalsData
+          .filter(goal => goal && typeof goal === 'object')
+          .map(goal => ({
+            id: goal.id?.toString() || Math.random().toString(),
+            name: goal.name?.toString() || 'Unnamed Goal',
+            targetAmount: typeof goal.targetAmount === 'number' ? goal.targetAmount : 0,
+            currentAmount: typeof goal.currentAmount === 'number' ? goal.currentAmount : 0,
+            deadline: goal.deadline || null,
+            status: goal.status?.toString() || 'IN_PROGRESS',
+            aiSuggestions: {
+              recommendations: Array.isArray(goal.aiSuggestions?.recommendations) ? goal.aiSuggestions.recommendations : [],
+              timeline: goal.aiSuggestions?.timeline || null,
+              strategy: goal.aiSuggestions?.strategy?.toString() || 'No strategy available'
+            }
+          }))
+        : [];
+
+      // Validate and transform categories data
+      const validCategories = Array.isArray(categoriesData)
+        ? categoriesData
+          .filter(cat => cat && typeof cat === 'object')
+          .map(cat => ({
+            id: cat.id?.toString() || Math.random().toString(),
+            name: cat.name?.toString() || 'Unnamed Category'
+          }))
+        : [];
 
       setTransactions(validTransactions);
-      setGoals(goalsData);
-      setCategories(categoriesData);
+      setGoals(validGoals);
+      setCategories(validCategories);
       await fetchAiInsight();
     } catch (err) {
       setError('Failed to load dashboard data');
@@ -205,19 +247,24 @@ export default function Dashboard() {
           </div>
           <div className="space-y-3">
             {Object.entries(
-              transactions.reduce((acc, tx) => {
-                if (tx?.type === 'EXPENSE' && tx?.category?.name) {
-                  const amount = typeof tx.amount === 'number' ? tx.amount : 0;
-                  acc[tx.category.name] = (acc[tx.category.name] || 0) + amount;
-                }
-                return acc;
-              }, {} as Record<string, number>)
+              transactions
+                .filter(tx => tx && tx.type === 'EXPENSE' && tx.category?.name && typeof tx.amount === 'number')
+                .reduce((acc, tx) => {
+                  const categoryName = tx.category?.name || 'Uncategorized';
+                  acc[categoryName] = (acc[categoryName] || 0) + (tx.amount || 0);
+                  return acc;
+                }, {} as Record<string, number>)
             ).map(([category, amount]) => (
               <div key={category} className="flex items-center justify-between">
-                <span>{category}</span>
-                <span className="font-mono">${amount.toFixed(2)}</span>
+                <span>{category || 'Uncategorized'}</span>
+                <span className="font-mono">${(amount || 0).toFixed(2)}</span>
               </div>
             ))}
+            {transactions.length === 0 && (
+              <div className="text-gray-400 text-center py-4">
+                No transactions to display
+              </div>
+            )}
           </div>
         </div>
 
